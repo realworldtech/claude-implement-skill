@@ -1,0 +1,13 @@
+# Implementation trackers (these are per-project, not part of the skill)
+.impl-tracker-*.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/

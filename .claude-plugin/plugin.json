@@ -1,0 +1,14 @@
+{
+  "name": "implement",
+  "description": "Skill for implementing features from specification documents with systematic tracking and verification",
+  "version": "1.0.0",
+  "author": {
+    "name": "Real World Technology Solutions",
+    "url": "https://rwts.com.au"
+  },
+  "keywords": ["implementation", "specifications", "tracking", "verification"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/realworldtech/claude-implement-skill"
+  }
+}
