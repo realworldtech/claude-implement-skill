@@ -24,6 +24,23 @@ This allows you to work on multiple specs simultaneously without conflicts.
 **Last Updated**: YYYY-MM-DD
 **Status**: Planning | In Progress | Verification | Complete
 
+## Recovery Instructions
+
+If you're reading this after context compaction or in a new session, follow these steps:
+
+1. **You are implementing a specification**. The spec path is shown above.
+2. **Read this entire tracker** to understand current state and progress.
+3. **Read the specification file** to understand requirements.
+4. **Check TaskList** for pending tasks.
+5. **Re-read relevant spec sections** (noted in Requirements Matrix) before any implementation work.
+6. **Delegate implementation to sub-agents**:
+   - Straightforward tasks (adding fields, simple CRUD): use `model: "sonnet"` or `"haiku"`
+   - Moderate/complex tasks (logic, algorithms): use `model: "opus"`
+7. **Use Opus for verification** and fixing issues (`model: "opus"` - always).
+8. **Update this tracker** after each completed task.
+
+Key workflow: Tracker → Spec sections → Sub-agent → Verify → Update tracker
+
 ## Specification Summary
 
 Brief description of what the spec covers and the major functional areas.

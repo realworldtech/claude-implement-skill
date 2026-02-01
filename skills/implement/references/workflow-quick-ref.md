@@ -56,6 +56,31 @@ During verification:
 
 ---
 
+## Fixing Verification Failures
+
+**Always use Opus** when fixing gaps found during verification.
+
+For each gap:
+1. Spawn a fix sub-agent with `model: "opus"`
+2. Include: spec quote, current code, what's missing
+3. After fix, re-verify that specific section
+4. Update tracker with new implementation notes
+5. Repeat until all gaps resolved
+
+Quick template:
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "opus",
+  prompt: "Fix gap in [file] for §X.Y.
+  Spec says: [quote]
+  Current: [file:line]
+  Missing: [gap description]"
+)
+```
+
+---
+
 ## Status Indicators
 
 Use consistent status terms:
@@ -86,16 +111,76 @@ When you find a gap:
 
 ---
 
+## Sub-Agent Workflow
+
+### When to Delegate vs Work Inline
+
+**Delegate to sub-agent:**
+- Implementing discrete requirements (1-3 section references)
+- Tasks with clear inputs (spec sections) and outputs (code changes)
+- When main conversation context is getting large
+
+**Keep in main conversation:**
+- Planning and orchestration
+- Reading/updating the tracker
+- User interactions and decisions
+- Final verification review
+
+### Model Selection Guide
+
+| Task Complexity | Model | Examples |
+|-----------------|-------|----------|
+| Straightforward | `haiku` or `sonnet` | Adding a field, simple CRUD, boilerplate |
+| Moderate/Complex | `opus` | Logic decisions, algorithms, state management |
+| Verification | `opus` | Always - catches subtle gaps |
+| Fixing issues | `opus` | Always - requires understanding root cause |
+
+**When in doubt, use `opus`**. If the task involves any logic decisions, conditional behavior, or algorithmic work, use `opus`.
+
+### Sub-Agent Prompt Structure
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "sonnet",
+  prompt: "Implement [requirement] per §X.Y.
+
+  ## Spec Requirement (§X.Y)
+  [Exact quoted text from spec]
+
+  ## Files to Modify
+  - path/to/file.py
+
+  ## Expected Changes
+  - [What should be implemented]
+
+  Summarize changes made and any issues encountered."
+)
+```
+
+---
+
 ## Session Start Ritual
 
 When starting or resuming work:
 
-1. Run `/implement list` to see active implementations
-2. Read the appropriate `.impl-tracker-<spec-name>.md`
-3. Run `TaskList` to see pending tasks
-4. Pick the next task
-5. Read the spec sections for that task
-6. Begin implementation
+1. **Check for compaction**: If you feel uncertain about the implementation context, you may have experienced compaction
+2. Run `/implement list` to see active implementations
+3. Read the appropriate `.impl-tracker-<spec-name>.md`
+4. **Read the Recovery Instructions** section in the tracker if you're unsure of the workflow
+5. Run `TaskList` to see pending tasks
+6. Pick the next task
+7. Read the spec sections for that task
+8. Delegate to sub-agent for implementation
+
+### Recognizing Compaction
+
+Signs you may have experienced compaction:
+- Vague sense of "implementing something" without specifics
+- Don't remember which spec sections you were working on
+- Conversation feels like it's starting fresh mid-task
+
+If this happens: Read the tracker first. It contains self-recovery instructions.
 
 ---
 

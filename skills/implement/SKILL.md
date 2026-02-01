@@ -3,7 +3,7 @@ name: implement
 description: Use this skill when implementing features from a specification document, business process document, or requirements document. Helps maintain connection to the source document throughout implementation and provides systematic verification.
 argument-hint: <spec-path> | status [name] | verify [name] | continue [name] | list
 user-invocable: true
-allowed-tools: Read, Write, Edit, Grep, Glob, Bash, TaskCreate, TaskUpdate, TaskList, TaskGet
+allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Task, TaskCreate, TaskUpdate, TaskList, TaskGet
 ---
 
 # Implementation Skill
@@ -25,6 +25,71 @@ This skill helps you implement features from specification documents while maint
 ## Core Principle: Section References as Anchors
 
 The key insight is that **section references (e.g., §2.4, §9.1, Section 3.2) are stable anchors** that survive context compaction. Every task, every tracker entry, and every verification item should reference specific sections from the source document.
+
+---
+
+## Sub-Agent Delegation Strategy
+
+To preserve context in long implementations, delegate actual coding work to sub-agents while keeping orchestration in the main conversation.
+
+### Model Selection
+
+Choose the model based on task complexity:
+
+| Task Complexity | Model | Examples |
+|-----------------|-------|----------|
+| Straightforward | `haiku` or `sonnet` | Adding a field, simple CRUD, boilerplate code |
+| Moderate/Complex | `opus` | Logic decisions, algorithmic work, state management |
+| Verification | `opus` | Always use Opus - catches subtle gaps |
+| Fixing issues | `opus` | Always use Opus - requires understanding root cause |
+
+**Rule of thumb**: If the task involves any logic decisions, conditional behavior, or algorithmic thinking, use `opus`. When in doubt, use `opus` - the cost savings from using smaller models aren't worth missing implementation details.
+
+### When to Delegate
+
+**Delegate to a sub-agent when:**
+- Implementing a discrete requirement (1-3 section references)
+- The task has clear inputs (spec sections) and outputs (code changes)
+- The main conversation context is getting large
+
+**Keep in main conversation:**
+- Planning and orchestration
+- Reading/updating the tracker
+- User interactions and decisions
+- Final verification review
+
+### Sub-Agent Task Pattern
+
+When delegating implementation work:
+
+1. **Prepare context** (main conversation):
+   - Read the tracker for section references
+   - Read the relevant spec sections
+   - Identify relevant existing code files
+
+2. **Delegate to sub-agent**:
+   ```
+   Task(
+     subagent_type: "general-purpose",
+     model: "sonnet",  // Use "opus" if task involves logic/algorithms
+     prompt: "Implement [requirement] per §X.Y.
+
+     Spec requirement (§X.Y):
+     [quoted spec text]
+
+     Files to modify:
+     - path/to/file.py
+
+     Expected changes:
+     - [describe expected implementation]"
+   )
+   ```
+
+3. **After sub-agent completes** (main conversation):
+   - Review the changes made
+   - If issues found, fix with `Task` using `model: "opus"`
+   - Update the tracker with implementation notes
+   - Update task status
 
 ---
 
@@ -114,23 +179,58 @@ Ask for approval before proceeding.
 
 ## Phase 2: Implementation
 
-### Before Starting Each Task
+### Implementation via Sub-Agents
 
-**CRITICAL**: Before beginning work on any task:
+For each task, use the sub-agent delegation pattern to preserve main conversation context:
+
+#### Step 1: Prepare Context (Main Conversation)
+
+**CRITICAL**: Before delegating any task:
 
 1. Read the tracker file to get the section references
 2. **Re-read the relevant section(s) from the original spec document**
 3. Note any specific requirements, formats, or constraints mentioned
+4. Identify relevant existing code files the sub-agent will need
 
 This prevents drift by ensuring you're always working from the source of truth.
 
-### During Implementation
+#### Step 2: Delegate to Sub-Agent
 
-1. Implement according to the spec requirements
-2. Note which files you're modifying and why
-3. If you discover the spec is ambiguous or has gaps, note this and ask the user
+Spawn a sub-agent for the implementation work:
 
-### After Completing Each Task
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "sonnet",  // Use "haiku" for simpler tasks
+  prompt: "Implement [requirement] per §X.Y of the specification.
+
+  ## Spec Requirement (§X.Y)
+  [Quote the exact spec text here]
+
+  ## Files to Modify
+  - path/to/file.py (describe what changes needed)
+
+  ## Context
+  [Any relevant existing code patterns or constraints]
+
+  ## Expected Outcome
+  - [Describe what the implementation should do]
+
+  After implementation, summarize what you changed and any issues encountered."
+)
+```
+
+#### Step 3: Review and Verify (Main Conversation)
+
+After sub-agent completes:
+
+1. Review the changes made by the sub-agent
+2. Verify they match the spec requirements
+3. If issues found:
+   - For minor fixes: fix directly
+   - For complex issues: spawn another sub-agent with `model: "opus"`
+
+#### Step 4: Update Tracker
 
 1. Update the tracker file:
    - Change status from `pending` to `complete` or `partial`
@@ -144,11 +244,39 @@ Example tracker update:
 | §2.4 | Detect merged tickets | complete | EdgeCaseHandler.check_merge() at src/handlers.py:156 |
 ```
 
+### Handling Sub-Agent Issues
+
+If a sub-agent's implementation has gaps or errors:
+
+1. Note the specific issue
+2. Spawn a fix sub-agent with Opus for complex reasoning:
+   ```
+   Task(
+     subagent_type: "general-purpose",
+     model: "opus",
+     prompt: "Fix implementation issue in [file].
+
+     ## Problem
+     [Describe the gap or error]
+
+     ## Spec Requirement (§X.Y)
+     [Quote the spec]
+
+     ## Current Implementation
+     [What exists now at file:line]
+
+     ## Expected Fix
+     [What needs to change]"
+   )
+   ```
+
 ---
 
 ## Phase 3: Verification (`/implement verify [spec-name]`)
 
 When the user requests verification:
+
+**Important**: Verification requires careful reasoning to catch subtle gaps. Use `model: "opus"` when delegating verification work to sub-agents.
 
 ### Finding the Right Tracker
 
@@ -170,6 +298,29 @@ For each section in the spec:
 2. Check the tracker for claimed implementation
 3. Verify the actual code matches the requirement
 4. Assess status: Implemented / Partial / Gap / Not Applicable
+
+**Optional optimization**: For large specs, delegate section verification to parallel sub-agents:
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "opus",  // Use Opus for verification - catches subtle gaps
+  prompt: "Verify implementation of §X against the specification.
+
+  ## Spec Section (§X)
+  [Quote the full section]
+
+  ## Claimed Implementation
+  [From tracker: file:line references]
+
+  ## Task
+  1. Read each claimed implementation file
+  2. Verify the code matches EVERY requirement in the spec section
+  3. Report: Complete / Partial (what's missing) / Gap (not implemented)
+
+  Be thorough - check edge cases, error handling, and exact formats."
+)
+```
 
 ### Step 3: Generate Gap Analysis
 
@@ -207,6 +358,39 @@ Produce a structured report like this:
 1. [HIGH] §X.Y - <description>
 2. [MEDIUM] §A.B - <description>
 ```
+
+### Step 4: Fix Verification Failures
+
+When verification identifies gaps or issues, **always use Opus** to fix them:
+
+1. **For each gap**, spawn a fix sub-agent:
+   ```
+   Task(
+     subagent_type: "general-purpose",
+     model: "opus",  // Always Opus for fixes
+     prompt: "Fix verification gap in [file].
+
+     ## Gap Details
+     - **Spec section**: §X.Y
+     - **Spec requirement**: [exact quote]
+     - **Current state**: [what exists at file:line]
+     - **What's missing**: [from gap analysis]
+
+     ## Task
+     1. Read the current implementation
+     2. Understand why it doesn't meet the spec
+     3. Implement the fix to fully satisfy §X.Y
+     4. Summarize what you changed"
+   )
+   ```
+
+2. **After each fix**, re-verify that specific section
+
+3. **Update the tracker** with new implementation notes
+
+4. **Repeat** until all gaps are resolved
+
+**Why always Opus for fixes?** Verification failures often involve subtle misunderstandings of requirements or edge cases. Opus's stronger reasoning catches these nuances and produces correct fixes the first time.
 
 ---
 
@@ -253,6 +437,43 @@ When resuming work:
 3. Identify the next pending task
 4. **Re-read the relevant spec sections** before continuing
 5. Resume implementation
+
+---
+
+## Recovery After Compaction
+
+Context compaction can cause Claude to lose detailed instructions. This section helps you recognize and recover from compaction.
+
+### Signs That Compaction Has Occurred
+
+You may have experienced compaction if:
+- You don't remember the specific spec sections you were implementing
+- You're unsure what `/implement` means or how to use it
+- The conversation feels like it's starting fresh mid-task
+- You have a vague sense of "implementing something" but lack specifics
+
+### Recovery Steps
+
+If you suspect compaction has occurred:
+
+1. **Check for tracker files**: Look for `.impl-tracker-*.md` in the current directory
+   ```
+   Glob(".impl-tracker-*.md")
+   ```
+
+2. **Read the tracker**: The tracker contains recovery instructions and current state
+
+3. **Read the spec**: The tracker's `**Specification**:` line points to the source document
+
+4. **Check TaskList**: See what tasks exist and their status
+
+5. **Resume work**: Use the tracker's Requirements Matrix to understand what's done and what's pending
+
+### Self-Recovery Protocol
+
+When you read a tracker file, look for the `## Recovery Instructions` section. Follow those instructions - they're designed to work even if you've lost all other context about the implementation skill.
+
+**Key workflow after recovery**: Tracker → Spec sections → Sub-agent → Verify → Update tracker
 
 ---
 
