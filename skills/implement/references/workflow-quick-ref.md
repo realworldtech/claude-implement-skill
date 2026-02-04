@@ -37,10 +37,15 @@ Before starting any task:
 
 After completing any task:
 
+- [ ] **Run tests** for the changed code (pytest, npm test, etc.)
+- [ ] **Fix any test failures** before marking complete
+- [ ] **Run linting/type checks** if configured (mypy, flake8, eslint, tsc)
 - [ ] Update tracker: change status, add file:line reference
 - [ ] Add Implementation Log entry
 - [ ] Note any gaps or ambiguities discovered
 - [ ] Update task status with TaskUpdate
+
+**Never mark a task complete if tests are failing.**
 
 ---
 
@@ -48,11 +53,19 @@ After completing any task:
 
 During verification:
 
+**FIRST - Validate code works:**
+- [ ] **Run full test suite** - fix any failures before proceeding
+- [ ] **Run linting/type checking** - fix any errors
+- [ ] **Verify code compiles/runs** - no import errors, syntax errors
+
+**THEN - Verify spec compliance:**
 - [ ] Re-read the ENTIRE spec (not just remembered parts)
 - [ ] Walk through section by section
 - [ ] For each requirement: find the code, confirm it matches
 - [ ] Document gaps with specific section references
 - [ ] Categorize gaps by severity (High/Medium/Low)
+
+**Never claim verification is complete if tests are failing.**
 
 ---
 
@@ -158,6 +171,18 @@ Task(
 )
 ```
 
+### After Sub-Agent Returns
+
+1. **Run tests** for affected code
+2. Fix any test failures (use Opus for complex fixes)
+3. Run linting/type checks
+4. Only then update tracker as complete
+
+```
+# Example test run after implementation
+Bash("pytest tests/test_affected_module.py -v")
+```
+
 ---
 
 ## Session Start Ritual
@@ -195,6 +220,23 @@ Before ending a session:
 
 ---
 
+## Definition of Done
+
+Implementation is ONLY complete when ALL of these are true:
+
+- [ ] **Tests pass**: All tests in the suite pass
+- [ ] **No lint/type errors**: Code passes all configured checks
+- [ ] **Code runs**: Application starts/compiles without errors
+- [ ] **Spec verification complete**: All requirements implemented or documented as N/A
+- [ ] **Tracker updated**: Requirements matrix reflects final state
+
+**If no test suite exists**, at minimum:
+- Import/load main modules to check for syntax errors
+- Run any available linting tools
+- Manually verify critical paths work
+
+---
+
 ## Red Flags
 
 Stop and re-read the spec if you notice:
@@ -204,6 +246,14 @@ Stop and re-read the spec if you notice:
 - Saying "I think" instead of "the spec says"
 - Skipping a requirement because it seems hard
 - Combining multiple features into one
+
+**Stop and run tests if you notice:**
+
+- About to mark a task as "complete" without running tests
+- Sub-agent returned but you haven't validated the code works
+- About to tell the user "implementation is done"
+- Made changes to multiple files without testing
+- Using field names or method names without verifying they exist
 
 ---
 

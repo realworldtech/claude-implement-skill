@@ -36,10 +36,13 @@ If you're reading this after context compaction or in a new session, follow thes
 6. **Delegate implementation to sub-agents**:
    - Straightforward tasks (adding fields, simple CRUD): use `model: "sonnet"` or `"haiku"`
    - Moderate/complex tasks (logic, algorithms): use `model: "opus"`
-7. **Use Opus for verification** and fixing issues (`model: "opus"` - always).
-8. **Update this tracker** after each completed task.
+7. **Run tests after each sub-agent completes** - never skip this step.
+8. **Use Opus for verification** and fixing issues (`model: "opus"` - always).
+9. **Update this tracker** after each completed task.
 
-Key workflow: Tracker → Spec sections → Sub-agent → Verify → Update tracker
+Key workflow: Tracker → Spec sections → Sub-agent → **Run tests** → Verify → Update tracker
+
+**CRITICAL**: Never mark tasks complete or claim "done" without running tests first. Field name typos, import errors, and type mismatches are caught by testing, not spec verification.
 
 ## Specification Summary
 
@@ -127,7 +130,7 @@ Chronological log of implementation sessions.
 Helps quickly re-orient when resuming work. Even a compacted context can use this to understand the domain.
 
 ### Requirements Matrix
-The core tracking table. Must be kept up-to-date after every task completion. File:line references allow quick navigation to implementation.
+The core tracking table. Must be kept up-to-date after every task completion. File:line references allow quick navigation to implementation. **The Tests column tracks test coverage** - a requirement is not truly complete until tests pass.
 
 ### Known Gaps
 Prevents losing track of identified issues. Each gap has enough context to be actionable even without full conversation history.
@@ -141,10 +144,11 @@ Provides session-by-session history. Useful for understanding what was done and 
 ## Updating the Tracker
 
 ### After completing a task:
-1. Update the row in Requirements Matrix
-2. Add file:line reference to Implementation column
-3. Add test reference if tests were added
-4. Add entry to Implementation Log
+1. **Run tests first** - never mark complete without validating code works
+2. Update the row in Requirements Matrix
+3. Add file:line reference to Implementation column
+4. Add test reference if tests were added (or note "manual validation" if no tests)
+5. Add entry to Implementation Log
 
 ### After discovering a gap:
 1. Add entry to Known Gaps section
@@ -152,9 +156,17 @@ Provides session-by-session history. Useful for understanding what was done and 
 3. Note in Implementation Log
 
 ### After verification:
-1. Update all statuses in Requirements Matrix
-2. Add new gaps to Known Gaps
-3. Update Implementation Log with verification results
+1. **Run full test suite first** - verification is meaningless if tests fail
+2. Update all statuses in Requirements Matrix
+3. Add new gaps to Known Gaps
+4. Update Implementation Log with verification results
+5. Note test pass/fail status in log entry
+
+### Before claiming "Done":
+1. All tests pass
+2. Linting/type checks pass (if configured)
+3. Application starts/compiles without errors
+4. All requirement statuses are `complete` or documented as `n/a`
 
 ## Machine-Readable Sections
 

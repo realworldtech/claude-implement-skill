@@ -220,29 +220,42 @@ Task(
 )
 ```
 
-#### Step 3: Review and Verify (Main Conversation)
+#### Step 3: Review, Test, and Verify (Main Conversation)
 
 After sub-agent completes:
 
-1. Review the changes made by the sub-agent
-2. Verify they match the spec requirements
-3. If issues found:
+1. **Run tests** for the affected code:
+   - Run the full test suite or at minimum the relevant test files
+   - If tests fail, fix the issues before proceeding
+   - If no tests exist for new functionality, consider adding them
+2. Review the changes made by the sub-agent
+3. Verify they match the spec requirements
+4. If issues found:
    - For minor fixes: fix directly
    - For complex issues: spawn another sub-agent with `model: "opus"`
+   - **Re-run tests after any fix**
 
 #### Step 4: Update Tracker
+
+**Only update to `complete` after tests pass.**
 
 1. Update the tracker file:
    - Change status from `pending` to `complete` or `partial`
    - Add implementation notes with file:line references
+   - Add test file references if applicable
    - Add entry to Implementation Log
 
 2. Update the task status using TaskUpdate
 
 Example tracker update:
 ```markdown
-| §2.4 | Detect merged tickets | complete | EdgeCaseHandler.check_merge() at src/handlers.py:156 |
+| §2.4 | Detect merged tickets | complete | EdgeCaseHandler.check_merge() at src/handlers.py:156 | test_handlers.py:45 |
 ```
+
+**Do not mark as `complete` if:**
+- Tests are failing
+- You haven't run the tests
+- There are linting/type errors
 
 ### Handling Sub-Agent Issues
 
@@ -277,6 +290,30 @@ If a sub-agent's implementation has gaps or errors:
 When the user requests verification:
 
 **Important**: Verification requires careful reasoning to catch subtle gaps. Use `model: "opus"` when delegating verification work to sub-agents.
+
+### Step 0: Run Tests and Validate Code
+
+**Before any spec verification, ensure the code actually works:**
+
+1. **Run the test suite** (if one exists):
+   - Run all tests: `pytest`, `npm test`, `cargo test`, etc.
+   - If tests fail, fix them BEFORE proceeding with spec verification
+   - Document test coverage gaps in the tracker
+
+2. **Run linting/type checking** (if configured):
+   - Python: `mypy`, `flake8`, `black --check`
+   - TypeScript: `tsc --noEmit`, `eslint`
+   - Other languages: run their standard linters
+   - Fix any errors before proceeding
+
+3. **Verify the code compiles/runs**:
+   - For compiled languages: ensure it builds without errors
+   - For interpreted languages: do a basic import/load check
+   - For web apps: verify the dev server starts
+
+**If any of these fail, you are NOT ready for verification.** Fix the issues first.
+
+This catches field name typos, import errors, type mismatches, and other mechanical issues that spec verification alone won't find.
 
 ### Finding the Right Tracker
 
@@ -359,7 +396,7 @@ Produce a structured report like this:
 2. [MEDIUM] §A.B - <description>
 ```
 
-### Step 4: Fix Verification Failures
+### Step 5: Fix Verification Failures
 
 When verification identifies gaps or issues, **always use Opus** to fix them:
 
@@ -390,7 +427,25 @@ When verification identifies gaps or issues, **always use Opus** to fix them:
 
 4. **Repeat** until all gaps are resolved
 
+5. **Re-run tests after fixes**: Every fix must be validated by running tests again. Never claim verification is complete until tests pass.
+
 **Why always Opus for fixes?** Verification failures often involve subtle misunderstandings of requirements or edge cases. Opus's stronger reasoning catches these nuances and produces correct fixes the first time.
+
+### Definition of Done
+
+Implementation is ONLY complete when ALL of these are true:
+
+- [ ] **Tests pass**: All tests in the test suite pass (`pytest`, `npm test`, etc.)
+- [ ] **No lint/type errors**: Code passes linting and type checking if configured
+- [ ] **Code runs**: The application starts/compiles without errors
+- [ ] **Spec verification complete**: All requirements are implemented or documented as N/A
+- [ ] **Tracker updated**: Requirements matrix reflects final state with file:line references
+- [ ] **Gaps documented**: Any remaining gaps are documented with severity and rationale
+
+**Never claim "done" or "complete" without running tests first.** Field name typos, missing imports, type errors, and similar issues are embarrassing failures that testing catches. If no test suite exists, at minimum:
+- Import/load the main modules to check for syntax errors
+- Run any available linting tools
+- Manually verify critical paths work
 
 ---
 
@@ -473,7 +528,9 @@ If you suspect compaction has occurred:
 
 When you read a tracker file, look for the `## Recovery Instructions` section. Follow those instructions - they're designed to work even if you've lost all other context about the implementation skill.
 
-**Key workflow after recovery**: Tracker → Spec sections → Sub-agent → Verify → Update tracker
+**Key workflow after recovery**: Tracker → Spec sections → Sub-agent → **Run tests** → Verify → Update tracker
+
+**CRITICAL**: Never claim completion without running tests. Field name errors, import mistakes, and type mismatches won't be caught by spec verification alone.
 
 ---
 
