@@ -179,6 +179,15 @@ Ask for approval before proceeding.
 
 ## Phase 2: Implementation
 
+### Pre-Implementation Check
+
+**Before writing any implementation code**, verify:
+1. A tracker file (`.impl-tracker-*.md`) exists in the current directory
+2. The tracker has a populated Requirements Matrix
+3. Tasks have been created via TaskCreate
+
+If any of these are missing, STOP and complete Phase 1 first. Do not proceed to implementation without a tracker, even if you have the spec content in context.
+
 ### Implementation via Sub-Agents
 
 For each task, use the sub-agent delegation pattern to preserve main conversation context:
@@ -560,6 +569,12 @@ If you notice you've deviated from the spec:
 
 ---
 
+## Critical Rule: No Implementation Without a Tracker
+
+**NEVER begin implementing code without first creating a tracker file.** This is the most important rule of this skill. If you find yourself about to write implementation code and no `.impl-tracker-*.md` file exists, STOP and go through Phase 1 first.
+
+This is especially important when the spec content is already visible in conversation context (e.g., after using `/spec` to create it). Having the spec in context makes it tempting to skip the tracker — but the tracker is what prevents gaps during context compaction. Without it, requirements WILL be missed.
+
 ## Arguments Handling
 
 The `$ARGUMENTS` variable contains what the user passed after `/implement`.
@@ -570,7 +585,20 @@ Parse it as follows:
 - If it starts with `verify`: Run verification (optional spec-name follows)
 - If it starts with `continue`: Resume work (optional spec-name follows)
 - If it's `list`: List all `.impl-tracker-*.md` files with their spec paths and status summaries
-- If empty: Check for trackers, if exactly one exists offer to continue, if multiple list them, if none ask for spec path
+- If empty: Follow the **empty arguments procedure** below
+
+### Empty Arguments Procedure
+
+When `$ARGUMENTS` is empty:
+
+1. Check for existing trackers (`.impl-tracker-*.md` in current directory)
+   - If exactly one exists: offer to continue implementation
+   - If multiple exist: show list and ask which to continue
+2. If no trackers exist:
+   - Search for recently-created spec/requirements documents: `Glob("**/*spec*.md")` and `Glob("**/*requirements*.md")`
+   - If candidate specs are found: present them to the user and ask which to implement
+   - If no candidates found: ask the user for the path to their specification document
+3. **Once a spec path is identified, ALWAYS go through Phase 1 (Planning) to create the tracker before any implementation work begins.** Do not skip this step even if the spec content is already visible in the conversation.
 
 ### Tracker Discovery
 
