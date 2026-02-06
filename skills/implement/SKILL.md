@@ -229,29 +229,73 @@ Task(
 )
 ```
 
-#### Step 3: Review, Test, and Verify (Main Conversation)
+#### Step 3: Review and Verify (Main Conversation)
 
-After sub-agent completes:
+After the implementation sub-agent completes:
 
-1. **Run tests** for the affected code:
+1. Review the changes made by the sub-agent
+2. Verify they match the spec requirements
+3. **Run existing tests** to check for regressions:
    - Run the full test suite or at minimum the relevant test files
    - If tests fail, fix the issues before proceeding
-   - If no tests exist for new functionality, consider adding them
-2. Review the changes made by the sub-agent
-3. Verify they match the spec requirements
 4. If issues found:
    - For minor fixes: fix directly
    - For complex issues: spawn another sub-agent with `model: "opus"`
    - **Re-run tests after any fix**
 
-#### Step 4: Update Tracker
+#### Step 4: Write Tests for New Functionality
 
-**Only update to `complete` after tests pass.**
+After the implementation is reviewed and existing tests pass, determine what tests are needed for the new code. This is a separate step from implementation — do not bundle test writing into the implementation sub-agent.
+
+**Determine what to test** by re-reading the spec sections for this task and examining what was implemented. Focus on meaningful, spec-driven tests:
+
+- **Does this endpoint/view exist and respond correctly?**
+- **Do permissions and access controls work as specified?**
+- **Does this algorithm/logic produce correct results for spec-defined scenarios?**
+- **Do error cases behave as the spec requires?**
+
+Do NOT write trivial tests (testing that a constant equals itself, testing framework boilerplate, testing Python's built-in behavior). Every test should verify a requirement or behavior from the spec.
+
+**If the spec doesn't clearly define expected behavior for a piece of functionality, and you can't reasonably infer it from context, ask the user** what the expected behavior should be before writing tests.
+
+**Delegate test writing to a sub-agent:**
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "sonnet",  // Use "opus" for complex logic or algorithm tests
+  prompt: "Write tests for the implementation of §X.Y.
+
+  ## Spec Requirement (§X.Y)
+  [Quote the spec text - this defines WHAT to test]
+
+  ## Implementation
+  [List files and key functions/classes that were implemented]
+
+  ## Test Expectations
+  - [Specific behaviors to verify, derived from the spec]
+
+  ## Existing Test Patterns
+  [Show an example from the existing test suite so tests match project conventions]
+
+  ## Guidelines
+  - Each test should verify a specific spec requirement or behavior
+  - Do not write trivial or boilerplate tests
+  - Include edge cases mentioned in the spec
+  - Use descriptive test names that reference the requirement"
+)
+```
+
+After the test sub-agent completes, **run the full test suite** to confirm both new and existing tests pass.
+
+#### Step 5: Update Tracker
+
+**Only update to `complete` after implementation is verified AND tests pass.**
 
 1. Update the tracker file:
    - Change status from `pending` to `complete` or `partial`
    - Add implementation notes with file:line references
-   - Add test file references if applicable
+   - Add test file references (required — not optional)
    - Add entry to Implementation Log
 
 2. Update the task status using TaskUpdate
@@ -264,6 +308,7 @@ Example tracker update:
 **Do not mark as `complete` if:**
 - Tests are failing
 - You haven't run the tests
+- New functionality has no tests
 - There are linting/type errors
 
 ### Handling Sub-Agent Issues
