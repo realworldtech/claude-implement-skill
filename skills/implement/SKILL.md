@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Use this skill when implementing features from a specification document, business process document, or requirements document. Helps maintain connection to the source document throughout implementation and provides systematic verification.
+description: Use this skill when implementing features from a specification document, business process document, or requirements document. Also use this skill when the user mentions .impl-tracker files, asks to fix implementation gaps, wants to verify implementation against a spec, or wants to continue/resume an in-progress implementation. Helps maintain connection to the source document throughout implementation and provides systematic verification.
 argument-hint: <spec-path> | status [name] | verify [name] | continue [name] | list
 user-invocable: true
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Task, TaskCreate, TaskUpdate, TaskList, TaskGet
@@ -574,6 +574,15 @@ If you notice you've deviated from the spec:
 **NEVER begin implementing code without first creating a tracker file.** This is the most important rule of this skill. If you find yourself about to write implementation code and no `.impl-tracker-*.md` file exists, STOP and go through Phase 1 first.
 
 This is especially important when the spec content is already visible in conversation context (e.g., after using `/spec` to create it). Having the spec in context makes it tempting to skip the tracker — but the tracker is what prevents gaps during context compaction. Without it, requirements WILL be missed.
+
+## Implicit Activation
+
+This skill may be activated not just by `/implement` but also when the user's message mentions tracker files, implementation gaps, or spec verification without explicitly invoking the command. In these cases:
+
+1. **Do not silently take over.** Instead, ask the user if they'd like to use the implementation skill to handle their request. For example:
+   > "It looks like you're working with an implementation tracker. Would you like me to use the `/implement` skill to systematically work through the gaps? This will re-read the spec, verify each gap against the source requirements, and fix them with proper tracking."
+2. If the user agrees, proceed by reading the tracker to determine the appropriate phase (typically `continue` or `verify`).
+3. If the user declines, assist them normally without the skill's workflow.
 
 ## Arguments Handling
 
