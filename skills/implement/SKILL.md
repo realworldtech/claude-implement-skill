@@ -377,95 +377,214 @@ This catches field name typos, import errors, type mismatches, and other mechani
    - If multiple: show list and ask which one
    - If none: inform user no active implementations found
 
-### Step 1: Re-read the Entire Specification
+### Step 1: Build the Verification Plan (Main Conversation)
 
-Read the tracker to get the spec path, then read the full spec document fresh. Do not rely on compacted context.
+Read ONLY these files in the main conversation:
+1. The implementation tracker (`.impl-tracker-<name>.md`) — to understand spec structure and file references
+2. The spec document's **structure/table of contents only** — to know which sections exist
+3. **Check for previous verification reports**: `Glob("verify-*.md")` in the project directory — if one or more exist, read the **most recent** report. This triggers **re-verification mode** (see below)
 
-### Step 2: Systematic Section-by-Section Review
+**Do NOT read full spec sections or implementation files in the main conversation.** Build a plan:
+- List each spec section, its location, and what it covers
+- Identify the implementation files each section maps to (from tracker)
+- If re-verifying: extract the list of open V-items from the previous report
 
-For each section in the spec:
+### Step 2: Extract Individual Requirements (Main Conversation)
 
-1. Read the section's requirements
-2. Check the tracker for claimed implementation
-3. Verify the actual code matches the requirement
-4. Assess status: Implemented / Partial / Gap / Not Applicable
+Read each spec section and extract its **individual requirements** — the specific MUST/SHOULD/COULD statements or concrete behavioural expectations, not the section headings. This is a lightweight step — you're building a requirement list, not analysing code.
 
-**Optional optimization**: For large specs, delegate section verification to parallel sub-agents:
+**Key distinction**: A spec subsection like "§2.1 Quick Capture" is a *topic area*, not a single requirement. It typically contains multiple individual requirements like "The system MUST allow adding assets by scanning a barcode", "The system SHOULD pre-fill fields from barcode data", etc. Each of those is a requirement. That's the level of granularity you need.
+
+For each section:
+1. Read the section content
+2. Extract each individual requirement with its §N.M reference and a one-line summary
+3. Note any implementation hints from the tracker (file:line references)
+4. Release the section content from context — you only need the requirement list going forward
+
+Build a flat list of all requirements to verify:
 
 ```
+§2.1.1 — Quick capture: scan barcode to add asset — impl hint: views/capture.py:30
+§2.1.2 — Quick capture: pre-fill fields from barcode data — impl hint: views/capture.py:55
+§2.1.3 — Quick capture: manual entry fallback — no hint
+§2.2.1 — Asset detail view shows all fields — impl hint: views/assets.py:80
+§2.2.2 — Asset edit with field validation — impl hint: views/assets.py:120
+§2.3.1 — Checkout assigns asset to borrower — impl hint: views/checkout.py:15
+...
+```
+
+A typical spec section (like §2 Functional Requirements with 15 subsections) should produce **30-60+ individual requirements**, NOT 15.
+
+### Step 3: Requirement-Level Verification via Sub-Agents (Parallel)
+
+**Each sub-agent verifies ONE requirement.** This is not a guideline — it is a hard rule.
+
+```python
+# Pattern: ONE requirement = ONE sub-agent
+
+# 1. Extract the single requirement text (from Step 2)
+req_text = "§2.1.1: The system MUST allow adding assets by scanning a barcode. The scanned code MUST be validated against known formats."
+
+# 2. Build implementation hints from tracker (if available)
+impl_hints = "Implementation tracker references: views/capture.py:30"
+
+# 3. Delegate — one requirement, one agent
 Task(
   subagent_type: "general-purpose",
-  model: "opus",  // Use Opus for verification - catches subtle gaps
-  prompt: "Verify implementation of §X against the specification.
+  model: "opus",
+  prompt: """Verify implementation of ONE spec requirement against the codebase.
 
-  ## Spec Section (§X)
-  [Quote the full section]
+## Requirement: §2.1.1 — Quick Capture: Scan Barcode to Add Asset
 
-  ## Claimed Implementation
-  [From tracker: file:line references]
+<paste the single requirement text — NOT the whole §2.1 subsection>
 
-  ## Task
-  1. Read each claimed implementation file
-  2. Verify the code matches EVERY requirement in the spec section
-  3. Report: Complete / Partial (what's missing) / Gap (not implemented)
+## Implementation Search Instructions
 
-  Be thorough - check edge cases, error handling, and exact formats."
+Search directory: <implementation_dir>
+Implementation hints (from tracker): <impl_hints>
+
+1. Search the codebase for code that implements this requirement (use Grep/Glob to find relevant files)
+2. Read the implementation files to confirm they satisfy the requirement
+3. Search for test files covering this implementation (look in tests/, test_*, *_test.py, etc.)
+4. Assess test coverage: what's tested, what's missing
+
+## Report Format (use ONLY this format)
+
+### §2.1.1 — Quick Capture: Scan Barcode
+
+**Spec says**: <exact quote or summary of the requirement>
+**Status**: Implemented / Partial / Not Implemented / N/A
+**Implementation**: `file.py:123` — <brief description of how it's implemented>
+**Test coverage**: Full / Partial / None
+**Tests**: `test_file.py:45` — <what's tested>
+**Missing tests**: <what's not tested — edge cases, error paths, permission boundaries, etc.>
+
+(The V<N> ID will be assigned by the main conversation when assembling the report.
+Use the §N.M reference as-is — the main conversation handles V-item numbering.)
+
+Keep your response focused on findings only. Do NOT suggest fixes or implementation code.
+Do NOT restate the spec beyond the brief quote. Be specific with file:line references.
+"""
 )
 ```
 
-### Step 3: Generate Gap Analysis
+**HARD RULE: One requirement per sub-agent.** Do NOT batch multiple requirements into one agent. Do NOT group by subsection. Do NOT cluster "related" requirements.
 
-Produce a structured report like this:
+The only exception: if two requirements are literally about the same line of code (e.g., "field MUST be required" and "field MUST be validated as email"), you MAY put those two in one agent. Never more than 2, and only when they test the exact same code path.
+
+**Anti-pattern — DO NOT do this:**
+```
+Agent 1: §2.1 (Quick Capture), §2.2 (Asset Management), §2.3 (Checkout), §2.4 (Barcodes)
+Agent 2: §2.5 (NFC), §2.6 (Search), §2.7 (Stocktake), §2.8 (Bulk Ops), §2.9 (Exports)
+```
+This groups entire subsections (each containing multiple requirements) into a single agent. The agent will rush through them, miss details, and produce shallow findings. This is the section-level batching pattern and it defeats the purpose of per-requirement verification.
+
+**Correct pattern:**
+```
+Agent 1:  §2.1.1 — Scan barcode to add asset
+Agent 2:  §2.1.2 — Pre-fill fields from barcode data
+Agent 3:  §2.1.3 — Manual entry fallback
+Agent 4:  §2.2.1 — Asset detail view
+Agent 5:  §2.2.2 — Asset edit with validation
+Agent 6:  §2.3.1 — Checkout assigns to borrower
+Agent 7:  §2.3.2 — Checkin returns asset
+...
+Agent 35: §8.1.1 — Unit test coverage target
+```
+
+Yes, this means 20-40+ parallel agents for a medium-sized spec. That's correct. Each agent runs fast (one focused search), produces precise results, and finishes quickly. The total wall-clock time is often *less* than the batched approach because agents aren't serialising through a long list of requirements internally.
+
+### Step 4: Assemble Verification Report (Main Conversation)
+
+Collect findings from sub-agents and write them directly to a report file. Do NOT accumulate all results in conversation context — write incrementally.
+
+Create the report at `verify-<spec-name>-<date>.md` in the project directory.
+
+Each finding gets a **V-item ID** (`V1`, `V2`, ...) that persists across verification runs. V-item IDs are assigned sequentially during report assembly. On re-verification, resolved items keep their original ID for traceability.
 
 ```markdown
-## Gap Analysis: <Spec Name>
+# Implementation Verification: <Spec Name>
 
-### Section N: <Section Title>
+**Spec**: <path to spec>
+**Implementation**: <path to implementation directory>
+**Date**: <date>
+**Previous Verification**: <path to previous report, or "None — initial verification">
+**Run**: <N> (1 for initial, 2+ for re-verification)
 
-| Spec Section | Requirement | Status | Notes |
-|--------------|-------------|--------|-------|
-| §N.1 | <requirement> | Complete | <implementation location> |
-| §N.2 | <requirement> | Partial | <what's missing> |
-| §N.3 | <requirement> | GAP | <not implemented> |
+## Summary
 
-### Gap Details
+<2-3 sentence assessment of overall implementation completeness and test coverage>
 
-#### §N.2 - <Requirement Name>
-**Spec says**: <exact quote from spec>
-**Current state**: <what's actually implemented>
-**Gap**: <what's missing>
-**Suggested fix**: <how to address>
+**Overall Implementation Status**: X of Y requirements verified
+**Test Coverage**: X of Y testable requirements have tests
 
-### Summary
+## Requirement-by-Requirement Verification
 
-| Status | Count |
+### V1 — §N.M — <Requirement Title>
+
+**Spec says**: <exact quote>
+**Status**: Implemented / Partial / Not Implemented / N/A
+**Implementation**: `file.py:123` — <brief description>
+**Test coverage**: Full / Partial / None
+**Tests**: `test_file.py:45` — <what's tested>
+**Missing tests**: <what's not tested — edge cases, error paths, etc.>
+
+### V2 — §N.M+1 — ...
+
+## Test Coverage Summary
+
+| V-Item | Section | Requirement | Impl Status | Test Coverage | Missing Tests |
+|--------|---------|-------------|-------------|---------------|---------------|
+| V1 | §2.1 | User login | Implemented | Partial | No test for locked account |
+| V2 | §2.2 | Password reset | Implemented | Full | — |
+| V3 | §2.3 | Session timeout | Not Implemented | None | All |
+
+## Items Requiring Tests
+
+Priority list of untested or under-tested requirements:
+
+1. [HIGH] V3 — §X.Y — <requirement> — No tests at all, covers permission boundary
+2. [MEDIUM] V1 — §A.B — <requirement> — Happy path tested, missing edge cases: <list>
+3. [LOW] V5 — §C.D — <requirement> — Minor gap: <detail>
+
+## Scorecard
+
+| Metric | Score |
 |--------|-------|
-| Complete | X |
-| Partial | Y |
-| Gap | Z |
-| N/A | W |
+| Requirements Implemented | X / Y (Z%) |
+| Fully Tested | A / B (C%) |
+| Partially Tested | D |
+| No Tests | E |
+| Critical Gaps | F |
 
-### Priority Gaps
-1. [HIGH] §X.Y - <description>
-2. [MEDIUM] §A.B - <description>
+## Priority Gaps
+
+1. [HIGH] V<N> — §X.Y — <description>
+2. [MEDIUM] V<N> — §A.B — <description>
+
+## Recommendations
+
+1. **Must add tests for**: <list critical untested items>
+2. **Implementation gaps**: <list unimplemented requirements>
+3. **Partial implementations**: <list items needing completion>
 ```
 
 ### Step 5: Fix Verification Failures
 
 When verification identifies gaps or issues, **always use Opus** to fix them:
 
-1. **For each gap**, spawn a fix sub-agent:
+1. **For each gap**, spawn a fix sub-agent with the V-item details:
    ```
    Task(
      subagent_type: "general-purpose",
      model: "opus",  // Always Opus for fixes
-     prompt: "Fix verification gap in [file].
+     prompt: "Fix verification gap identified as V<N>.
 
-     ## Gap Details
-     - **Spec section**: §X.Y
+     ## V-Item Details
+     - **V-item**: V<N> — §X.Y — <requirement title>
      - **Spec requirement**: [exact quote]
      - **Current state**: [what exists at file:line]
-     - **What's missing**: [from gap analysis]
+     - **What's missing**: [from verification report]
 
      ## Task
      1. Read the current implementation
@@ -475,7 +594,7 @@ When verification identifies gaps or issues, **always use Opus** to fix them:
    )
    ```
 
-2. **After each fix**, re-verify that specific section
+2. **After each fix**, re-verify that specific requirement (single sub-agent, same pattern as Step 3)
 
 3. **Update the tracker** with new implementation notes
 
@@ -484,6 +603,120 @@ When verification identifies gaps or issues, **always use Opus** to fix them:
 5. **Re-run tests after fixes**: Every fix must be validated by running tests again. Never claim verification is complete until tests pass.
 
 **Why always Opus for fixes?** Verification failures often involve subtle misunderstandings of requirements or edge cases. Opus's stronger reasoning catches these nuances and produces correct fixes the first time.
+
+### Re-Verification Mode
+
+When a previous verification report exists (`verify-<spec-name>-*.md`), the verify command runs in **re-verification mode**. Before starting, ask the user which mode they want:
+
+> I found a previous verification report (`verify-<date>.md`) with X open V-items.
+>
+> How would you like to proceed?
+> 1. **Re-verify from where we left off** — Check only the open V-items from the previous run, plus spot-check for regressions (faster, cheaper)
+> 2. **Full re-verification from scratch** — Re-audit all spec requirements as if this were a fresh run, but carry forward V-item IDs for traceability
+
+#### How Re-Verification Differs from Initial Verification
+
+| Aspect | Initial Verification | Re-verify (from left off) | Re-verify (from scratch) |
+|--------|---------------------|--------------------------|-------------------------|
+| Scope | All spec requirements | Open V-items + spot-check | All requirements again |
+| V-item IDs | Assigned fresh (V1, V2, ...) | Carried forward | Carried forward |
+| Report structure | Full report | Delta report with resolution status | Full report with resolution status |
+| Token cost | Full | ~30-50% of initial | ~100% of initial |
+
+#### Re-Verification from Where We Left Off
+
+1. **Read the most recent verification report** in the main conversation. Extract:
+   - All V-items and their status (focus on those NOT fully implemented or NOT fully tested)
+   - The V-item ID counter (so new items continue the sequence)
+
+2. **Categorize previous V-items**:
+   - **Open**: Status was Partial / Not Implemented, or test coverage was Partial / None — these MUST be re-checked
+   - **Passed**: Status was Implemented AND test coverage was Full — these get a lightweight spot-check
+
+3. **Dispatch re-verification sub-agents** (parallel):
+
+   For each **open** V-item, spawn a sub-agent with the original finding AND the spec requirement:
+
+   ```
+   Task(
+     subagent_type: "general-purpose",
+     model: "opus",
+     prompt: """Re-verify a previously identified issue.
+
+   ## Previous Finding
+
+   V12 — §3.2 — AI Thumbnail Generation
+   **Previous status**: Partial
+   **Previous issue**: Uses full URL instead of relative path for thumbnail src
+   **Previous implementation**: templates/library/book_detail.html:45
+
+   ## Spec Requirement
+
+   <paste the spec requirement text>
+
+   ## Instructions
+
+   1. Read the implementation file(s) referenced in the previous finding
+   2. Check if the specific issue has been addressed
+   3. Search for the current implementation if the file/line has changed
+   4. Re-assess test coverage for this requirement
+
+   ## Report Format
+
+   ### V12 — §3.2 — AI Thumbnail Generation
+
+   **Previous status**: Partial
+   **Current status**: Implemented / Partial / Not Implemented
+   **Resolution**: FIXED / PARTIALLY FIXED / NOT FIXED
+   **What changed**: <describe what was fixed, or why it's still open>
+   **Implementation**: `file.py:123` — <current implementation>
+   **Test coverage**: Full / Partial / None
+   **Tests**: `test_file.py:45` — <what's tested>
+   **Missing tests**: <what's still not tested>
+   """
+   )
+   ```
+
+   For **passed** V-items, do a lightweight spot-check: cluster 5-10 passed items into a single sub-agent that confirms the implementations still exist and haven't regressed. This is a sanity check, not a deep re-audit.
+
+4. **Check for new requirements**: If the spec has been updated since the last verification, also run initial verification on any NEW requirements not covered by previous V-items. Assign new V-item IDs continuing from the previous counter.
+
+#### Re-Verification from Scratch
+
+Run the full initial verification flow (Steps 2-4 above), but:
+- Read the previous report first to get the V-item ID assignments
+- Match new findings to previous V-items by §N.M section reference
+- Reuse existing V-item IDs where the same requirement is being verified
+- Assign new IDs only for requirements that weren't in the previous report
+- Include resolution status for items that were previously flagged
+
+#### V-Item Lifecycle
+
+V-items follow this lifecycle across verification runs:
+
+```
+Initial verification → V1 created (status: Partial)
+Re-verification 1   → V1 checked (resolution: PARTIALLY FIXED)
+Re-verification 2   → V1 checked (resolution: FIXED) — item closed
+```
+
+- **FIXED**: The issue is fully resolved. Appears in "Previous V-Item Resolution" but not in "Still Open"
+- **PARTIALLY FIXED**: Progress was made but the issue isn't fully resolved. Describe what changed and what remains
+- **NOT FIXED**: No meaningful progress on this item
+- **REGRESSED**: A previously FIXED item has broken again (rare but important to flag)
+
+V-item IDs are **permanent** — once V12 is assigned to "§3.2 AI Thumbnail Generation", it stays V12 forever, even across many re-verification runs. New issues discovered during re-verification get the next available ID.
+
+### Context Efficiency Rules
+
+Follow these rules strictly to avoid token waste:
+
+1. **Main conversation reads ONLY the tracker and spec structure** — do NOT load full spec sections or implementation files into main context
+2. **Pass spec requirement text directly in sub-agent prompts** — extract the text and embed it
+3. **Sub-agents DO read implementation files** — they need to search the codebase to verify
+4. **Cap sub-agent output** — structured findings only, no verbose analysis or code suggestions
+5. **One requirement per sub-agent** — don't overload agents with entire sections
+6. **Write findings directly to the report file** — don't accumulate results in main conversation context
 
 ### Definition of Done
 

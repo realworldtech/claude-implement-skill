@@ -58,12 +58,23 @@ During verification:
 - [ ] **Run linting/type checking** - fix any errors
 - [ ] **Verify code compiles/runs** - no import errors, syntax errors
 
-**THEN - Verify spec compliance:**
-- [ ] Re-read the ENTIRE spec (not just remembered parts)
-- [ ] Walk through section by section
-- [ ] For each requirement: find the code, confirm it matches
-- [ ] Document gaps with specific section references
-- [ ] Categorize gaps by severity (High/Medium/Low)
+**THEN - Extract individual requirements:**
+- [ ] Read spec structure (NOT full content) in main context
+- [ ] Extract individual MUST/SHOULD/COULD requirements (not section headings)
+- [ ] Build flat list: §N.M — one-line summary — impl hint from tracker
+- [ ] A section with 15 subsections should produce 30-60+ requirements, NOT 15
+
+**THEN - Verify at requirement level (parallel sub-agents):**
+- [ ] ONE requirement = ONE sub-agent (hard rule)
+- [ ] Each agent: search codebase, verify implementation, check test coverage
+- [ ] Each agent reports: Status, Implementation file:line, Test coverage, Missing tests
+- [ ] Do NOT batch sections into one agent — this produces shallow findings
+- [ ] Check for previous verify reports — triggers re-verification mode if found
+
+**THEN - Assemble report:**
+- [ ] Assign V-item IDs (V1, V2, ...) — persistent across re-verification runs
+- [ ] Write findings directly to report file (don't accumulate in context)
+- [ ] Include scorecard: requirements implemented, test coverage, critical gaps
 
 **Never claim verification is complete if tests are failing.**
 
@@ -73,10 +84,10 @@ During verification:
 
 **Always use Opus** when fixing gaps found during verification.
 
-For each gap:
+For each V-item gap:
 1. Spawn a fix sub-agent with `model: "opus"`
-2. Include: spec quote, current code, what's missing
-3. After fix, re-verify that specific section
+2. Include: V-item ID, spec quote, current code, what's missing
+3. After fix, re-verify that specific requirement (single sub-agent)
 4. Update tracker with new implementation notes
 5. Repeat until all gaps resolved
 
