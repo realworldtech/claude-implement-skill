@@ -42,14 +42,14 @@ Implementation preferences control workflow behavior across sessions and project
 # Implementation Preferences
 
 ## Workflow
-- **tdd-mode**: ask
+- **tdd-mode**: on
 ```
 
 ### Available Preferences
 
 | Preference | Values | Default | Description |
 |------------|--------|---------|-------------|
-| `tdd-mode` | `on`, `off`, `ask` | `ask` | Controls whether Test-Driven Development workflow is used |
+| `tdd-mode` | `on`, `off`, `ask` | `on` | Controls whether Test-Driven Development workflow is used |
 
 - `on` — Always use the TDD workflow (write tests first, then implement)
 - `off` — Always use the standard workflow (implement first, then write tests)
@@ -298,7 +298,7 @@ Before presenting the plan, determine which implementation workflow to use:
 1. **Read the TDD preference** using the lookup chain:
    - Check for `.impl-preferences.md` in the project directory
    - If not found (or no `tdd-mode` set), check `~/.claude/.impl-preferences.md`
-   - If neither exists, use the built-in default: `ask`
+   - If neither exists, use the built-in default: `on`
 
 2. **If the preference is `on` or `off`**, record it — no user prompt needed.
 
@@ -328,7 +328,7 @@ After the user approves the plan (and chooses a workflow if `ask` mode):
 
 ## Phase 2: Implementation
 
-**Workflow selection**: Check the tracker's `**TDD Mode**:` field to determine which workflow to use. If `on`, use the **Phase 2 (TDD Mode): Test-First Implementation** workflow below instead of this standard workflow. If `off` or not set, use this standard workflow. If the field is missing (e.g., tracker created before TDD mode existed), check preferences to determine the mode and update the tracker.
+**Workflow selection**: Check the tracker's `**TDD Mode**:` field to determine which workflow to use. If `on` or not set, use the **Phase 2 (TDD Mode): Test-First Implementation** workflow below instead of this standard workflow. If `off`, use this standard workflow. If the field is missing (e.g., tracker created before TDD mode existed), check preferences to determine the mode and update the tracker — default is `on`.
 
 ### Pre-Implementation Check
 
