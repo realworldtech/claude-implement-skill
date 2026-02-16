@@ -1,7 +1,7 @@
 ---
 name: implement
 description: Use this skill when implementing features from a specification document, business process document, or requirements document. Also use this skill when the user mentions .impl-tracker files, asks to fix implementation gaps, wants to verify implementation against a spec, or wants to continue/resume an in-progress implementation. Helps maintain connection to the source document throughout implementation and provides systematic verification.
-argument-hint: <spec-path> | status [name] | verify [name] | continue [name] | list
+argument-hint: <spec-path> | status [name] | verify [name] | continue [name] | list | config [setting] [value]
 user-invocable: true
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Task, TaskCreate, TaskUpdate, TaskList, TaskGet
 ---
@@ -19,8 +19,57 @@ This skill helps you implement features from specification documents while maint
 | `/implement verify [spec-name]` | Run systematic verification against the spec |
 | `/implement continue [spec-name]` | Resume implementation from where you left off |
 | `/implement list` | List all active implementation trackers |
+| `/implement config [setting] [value]` | View or update implementation preferences |
 
 **Note**: `[spec-name]` is optional. If omitted and multiple trackers exist, you'll be prompted to choose. The spec-name is the basename without path or extension (e.g., for `docs/billing-spec.md`, use `billing-spec`).
+
+## Preferences
+
+Implementation preferences control workflow behavior across sessions and projects. Preferences are stored in simple markdown files.
+
+### Preference Files
+
+| File | Scope |
+|------|-------|
+| `.impl-preferences.md` (project directory) | Project-level — overrides global |
+| `~/.claude/.impl-preferences.md` | Global default — applies to all projects |
+
+**Lookup order**: Project file → Global file → Built-in defaults
+
+### Preference File Format
+
+```markdown
+# Implementation Preferences
+
+## Workflow
+- **tdd-mode**: ask
+```
+
+### Available Preferences
+
+| Preference | Values | Default | Description |
+|------------|--------|---------|-------------|
+| `tdd-mode` | `on`, `off`, `ask` | `ask` | Controls whether Test-Driven Development workflow is used |
+
+- `on` — Always use the TDD workflow (write tests first, then implement)
+- `off` — Always use the standard workflow (implement first, then write tests)
+- `ask` — Prompt during Phase 1 planning so the user can choose per-implementation
+
+### `/implement config` Subcommand
+
+View or update preferences:
+
+| Command | Description |
+|---------|-------------|
+| `/implement config` | Show current effective preferences (project + global + defaults) |
+| `/implement config tdd on\|off\|ask` | Set TDD preference at project level |
+| `/implement config --global tdd on\|off\|ask` | Set TDD preference as global default |
+
+When setting a preference:
+1. Read the existing preferences file (or create it if it doesn't exist)
+2. Update the specified value
+3. Write the file back
+4. Confirm the change to the user, showing the effective preference chain
 
 ## Core Principle: Section References as Anchors
 
@@ -44,6 +93,35 @@ Choose the model based on task complexity:
 | Fixing issues | `opus` | Always use Opus - requires understanding root cause |
 
 **Rule of thumb**: If the task involves any logic decisions, conditional behavior, or algorithmic thinking, use `opus`. When in doubt, use `opus` - the cost savings from using smaller models aren't worth missing implementation details.
+
+### Size-Based Routing for Large Specs
+
+When a spec has breakout section files (e.g., produced by `/spec`), build a structural index before delegating work:
+
+1. **Build the index**: Run `wc -c` on each section file. Estimate tokens: `estimated_tokens ≈ file_size_bytes / 4`
+2. **Route by section size**:
+
+| Section Size | Model | Grouping |
+|-------------|-------|----------|
+| < 5k tokens | `sonnet` | Group 2-3 sections per agent |
+| 5k–20k tokens | `sonnet` | 1 section per agent |
+| > 20k tokens | `opus` | 1 section per agent |
+
+3. **Digest-based complexity escalation**: Instead of self-escalation, sonnet agents produce a DIGEST (5-10 lines) at the end of their response summarizing key entities, patterns, and complexity encountered. The main conversation checks the DIGEST against the complexity category table to determine if opus review is needed:
+
+   | Category | DIGEST signals | Why opus review needed |
+   |----------|---------------|----------------------|
+   | Algorithms | "algorithm", "calculation", "formula", "heuristic" | Subtle correctness |
+   | State machines | "state machine", "state transition", "lifecycle" | Complex interactions |
+   | Permission/auth | "permission", "role inheritance", "RBAC", "access control" | Security boundaries |
+   | Complex business rules | "conditional", "override", "exception", "cascading" | Edge cases |
+   | Cross-cutting | "affects all", "global constraint", "system-wide" | Holistic view |
+
+   Escalation is **MANDATORY** when a DIGEST matches any category — it is not discretionary. When matched: dispatch opus to REVIEW sonnet's code changes with focus on the flagged area. Do NOT rationalize skipping the review ("it looks fine", "the tests pass") — the whole point is that these categories have subtle failure modes that tests alone don't catch.
+
+**Sub-split sections**: When a section was split into sub-files (e.g., `02a-`, `02b-`, `02c-`), each sub-file routes independently by its own size. Tasks referencing the parent section (e.g., §2) should include all sub-file paths in the sub-agent prompt.
+
+**Note**: This only applies when the spec has breakout section files. Single-file specs use the standard model selection table above.
 
 ### When to Delegate
 
@@ -86,6 +164,8 @@ When delegating implementation work:
    ```
 
 3. **After sub-agent completes** (main conversation):
+   - Sub-agent output comes via `TaskOutput` — use that directly
+   - **Do NOT read or grep agent output files** — they are raw JSON transcripts, not usable text
    - Review the changes made
    - If issues found, fix with `Task` using `model: "opus"`
    - Update the tracker with implementation notes
@@ -99,9 +179,37 @@ When the user provides a spec path, follow these steps:
 
 ### Step 1: Read and Parse the Specification
 
+**STRUCT awareness check**: Before parsing the spec, look for `.spec-tracker-*.md` files in the spec's directory. If found, check for a `## Pending Structural Changes` section. If pending structural issues exist, warn the user:
+
+> The spec has pending structural changes flagged by the `/spec` skill. These may affect implementation planning. Would you like to proceed anyway, or wait for the spec author to resolve them?
+
+If the user chooses to proceed, note the pending issues in the tracker's Implementation Log.
+
+**Detect spec type**: Check whether the spec has breakout section files. Look for `<!-- EXPANDED:` markers in the master document or a `sections/` directory alongside it. This determines the parsing approach:
+
+#### Single-File Specs (no breakout sections)
+
 1. Read the entire specification document
 2. Identify the document's section structure (look for patterns like `## Section N`, `### N.M`, `§N.M`, numbered headings)
 3. Extract each discrete requirement with its section reference
+
+#### Multi-File Specs (breakout sections, e.g., from `/spec`)
+
+Do NOT read all section files into main context — this will blow out the context window for large specs. Instead, build a structural index:
+
+1. Read the master spec's **document map / table of contents only** — this gives you the full spec outline without loading section prose
+2. Run `wc -c` on all section files to build the structural index:
+   ```
+   Bash("wc -c path/to/sections/*.md")
+   ```
+   Record each file's byte count and compute `estimated_tokens ≈ bytes / 4`
+   - **Sub-file splitting**: Section files may use letter suffixes when a section was too large and got split (e.g., `02a-core-model.md`, `02b-core-relations.md`, `02c-core-validation.md`). The glob `sections/*.md` captures these automatically. Group sub-files under their parent section number — a task referencing §2 may need all `02*` sub-files.
+   - **Routing**: Sub-split sections route independently by their own size. A task referencing a parent section should include all sub-file paths in the sub-agent prompt.
+3. Read only the **section headings and requirement identifiers** (MUST/SHOULD/COULD statements) from each section file — don't read full section prose into main context
+4. Sub-agents will read full section files themselves during Phase 2
+5. **Store the structural index in the tracker** as the spec baseline (see `## Structural Index` in the tracker template). This enables spec evolution detection when resuming work across sessions.
+
+Record the spec type in the tracker (`**Spec Type**: single-file` or `**Spec Type**: multi-file`) so that `/implement continue` knows which approach to use.
 
 ### Step 2: Create the Implementation Tracker
 
@@ -124,6 +232,24 @@ Use this format:
 **Specification**: <path-to-spec>
 **Created**: <date>
 **Last Updated**: <date>
+**TDD Mode**: <set in Step 5 after plan approval — on or off>
+**Spec Type**: <single-file or multi-file — set in Step 1 based on spec structure>
+**Spec Baseline**: <date — when structural index was captured>
+
+## Structural Index
+
+<!-- STRUCTURAL_INDEX
+file: <path> | bytes: <N> | tokens: <N> | route: <model> | parent: §<N>
+...
+-->
+
+| File | Bytes | Est. Tokens | Model Route | Parent Section |
+|------|-------|-------------|-------------|----------------|
+| ... | ... | ... | ... | ... |
+
+**Baseline captured**: <date>
+
+*Only populated for multi-file specs. For single-file specs, delete this section.*
 
 ## Requirements Matrix
 
@@ -165,19 +291,44 @@ Requirements from spec:
 Before starting: Re-read §2.4 and §10.2 from the spec.
 ```
 
-### Step 4: Present the Plan
+### Step 4: Determine TDD Mode
+
+Before presenting the plan, determine which implementation workflow to use:
+
+1. **Read the TDD preference** using the lookup chain:
+   - Check for `.impl-preferences.md` in the project directory
+   - If not found (or no `tdd-mode` set), check `~/.claude/.impl-preferences.md`
+   - If neither exists, use the built-in default: `ask`
+
+2. **If the preference is `on` or `off`**, record it — no user prompt needed.
+
+3. **If the preference is `ask`**, you will present the choice as part of the plan presentation in Step 5.
+
+### Step 5: Present the Plan
 
 Show the user:
 1. A summary of the specification structure
 2. The requirements matrix from the tracker
 3. The proposed task breakdown
-4. Any questions about ambiguous requirements or implementation approach
+4. The proposed implementation workflow:
+   - If TDD preference was `on` or `off`: state which workflow will be used
+   - If TDD preference is `ask`: present the choice:
 
-Ask for approval before proceeding.
+   > **Implementation workflow**: Which workflow would you like to use?
+   >
+   > - **TDD mode**: Tests are written first from the spec (before any implementation code), then implementation is done to make them pass. This catches spec drift early because the test-writing agent works purely from the spec with no implementation bias.
+   > - **Standard mode**: Implementation is done first, then tests are written afterward to verify the implementation.
+
+5. Any questions about ambiguous requirements or implementation approach
+
+After the user approves the plan (and chooses a workflow if `ask` mode):
+- **Record the choice in the tracker** by setting the `**TDD Mode**:` field to `on` or `off`. This ensures `/implement continue` knows which workflow to use even if the preference changes later.
 
 ---
 
 ## Phase 2: Implementation
+
+**Workflow selection**: Check the tracker's `**TDD Mode**:` field to determine which workflow to use. If `on`, use the **Phase 2 (TDD Mode): Test-First Implementation** workflow below instead of this standard workflow. If `off` or not set, use this standard workflow. If the field is missing (e.g., tracker created before TDD mode existed), check preferences to determine the mode and update the tracker.
 
 ### Pre-Implementation Check
 
@@ -197,7 +348,7 @@ For each task, use the sub-agent delegation pattern to preserve main conversatio
 **CRITICAL**: Before delegating any task:
 
 1. Read the tracker file to get the section references
-2. **Re-read the relevant section(s) from the original spec document**
+2. **Re-read the relevant section(s) from the original spec document** (for single-file specs) or **confirm which section file(s) the sub-agent will need to read** (for multi-file specs)
 3. Note any specific requirements, formats, or constraints mentioned
 4. Identify relevant existing code files the sub-agent will need
 
@@ -205,7 +356,9 @@ This prevents drift by ensuring you're always working from the source of truth.
 
 #### Step 2: Delegate to Sub-Agent
 
-Spawn a sub-agent for the implementation work:
+Spawn a sub-agent for the implementation work. The prompt style depends on spec type:
+
+**Single-file specs** — embed the spec text directly in the prompt:
 
 ```
 Task(
@@ -229,6 +382,45 @@ Task(
 )
 ```
 
+**Multi-file specs (breakout sections)** — pass file paths instead of embedded content. The sub-agent reads the section file itself, keeping main conversation context lean:
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "sonnet",  // Route by section size — see Size-Based Routing table
+  prompt: "Implement [requirement] per §X.Y of the specification.
+
+  ## Spec Layout (structural index)
+  [Paste the structural index so the agent knows the full spec layout]
+
+  ## Section to Read
+  Read the spec section at: path/to/sections/section-X.md
+  Focus on the requirements in §X.Y.
+
+  ## Requirement References
+  - §X.Y.1: [one-line summary from Phase 1 extraction]
+  - §X.Y.2: [one-line summary]
+
+  ## Files to Modify
+  - path/to/file.py (describe what changes needed)
+
+  ## Context
+  [Any relevant existing code patterns or constraints]
+
+  ## Expected Outcome
+  - [Describe what the implementation should do]
+
+  After implementation, summarize what you changed and any issues encountered.
+
+  At the end of your response, include a DIGEST section:
+  === DIGEST ===
+  - Entities: <key classes, models, services touched>
+  - Patterns: <design patterns used or encountered>
+  - Complexity: <any algorithmic, state machine, auth, or business rule complexity>
+  === END DIGEST ==="
+)
+```
+
 #### Step 3: Review and Verify (Main Conversation)
 
 After the implementation sub-agent completes:
@@ -242,6 +434,11 @@ After the implementation sub-agent completes:
    - For minor fixes: fix directly
    - For complex issues: spawn another sub-agent with `model: "opus"`
    - **Re-run tests after any fix**
+5. **Check DIGEST for complexity escalation** (multi-file/sonnet agents only):
+   - Extract the `=== DIGEST ===` section from the sub-agent's response
+   - Check DIGEST signals against the complexity category table (see Size-Based Routing)
+   - If any category matches: dispatch opus to review the sonnet's code changes with focus on the flagged complexity area
+   - Run tests again after any opus-driven changes
 
 #### Step 4: Write Tests for New Functionality
 
@@ -339,6 +536,171 @@ If a sub-agent's implementation has gaps or errors:
 
 ---
 
+## Phase 2 (TDD Mode): Test-First Implementation
+
+This workflow runs **instead of** the standard Phase 2 when TDD mode is active (tracker shows `**TDD Mode**: on`). The key difference: tests are written first from the spec before any implementation exists, then implementation is done to make them pass.
+
+### Why TDD Mode Works Well with Sub-Agents
+
+- **Spec fidelity**: The test-writing agent reads only the spec — no implementation code exists to bias it
+- **Clear acceptance criteria**: The implementation agent has concrete pass/fail signals from the tests
+- **Drift detection**: If the implementation agent can't make tests pass, it reveals misunderstandings early
+- **Different contexts catch different things**: Test and implementation agents interpret the spec independently — disagreements surface spec ambiguities
+- **Regression safety**: Tests exist before code, so there's no "forgot to write tests" problem
+
+### Pre-Implementation Check
+
+Same as the standard workflow — verify the tracker exists with a populated Requirements Matrix and tasks have been created.
+
+### TDD Implementation via Sub-Agents
+
+For each task, follow this test-first cycle:
+
+#### Step 1: Prepare Context (Main Conversation)
+
+Same as the standard workflow:
+
+1. Read the tracker file to get the section references
+2. **Re-read the relevant section(s) from the original spec document** (for single-file specs) or **confirm which section file(s) the sub-agent will need to read** (for multi-file specs)
+3. Note any specific requirements, formats, or constraints mentioned
+4. Identify relevant existing code files and test conventions
+
+#### Step 2: Write Tests First
+
+Delegate test writing to a sub-agent working **purely from the spec**. The sub-agent should NOT see any implementation code — only the spec requirements and existing test patterns.
+
+**For multi-file specs with breakout sections**: Pass the section file path instead of quoting the full text. The sub-agent reads the file directly. Include the structural index so the agent understands the full spec layout.
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "sonnet",  // Use "opus" for complex logic or algorithm tests
+  prompt: "Write tests for §X.Y BEFORE implementation exists.
+
+  ## Spec Requirement (§X.Y)
+  [Exact spec text — or for multi-file specs: 'Read the spec section at: path/to/sections/section-X.md']
+
+  ## What to Test
+  Write tests that verify the spec requirements are met.
+  These tests SHOULD FAIL right now — that's expected and correct.
+
+  ## Project Test Conventions
+  [Show existing test patterns/framework setup from the project]
+
+  ## Important
+  - Write tests from the SPEC, not from any existing code
+  - Tests should be specific enough to catch wrong implementations
+  - Include edge cases mentioned in the spec
+  - Each test should verify one clear spec requirement
+  - Tests MUST be runnable (correct imports, fixtures, etc.)
+  - Do NOT stub/mock the thing being tested — test real behavior
+  - Use descriptive test names that reference the requirement
+
+  At the end of your response, include a DIGEST section:
+  === DIGEST ===
+  - Entities: <key classes, models, services touched>
+  - Patterns: <design patterns used or encountered>
+  - Complexity: <any algorithmic, state machine, auth, or business rule complexity>
+  === END DIGEST ==="
+)
+```
+
+#### Step 3: Run Tests — Confirm Failures
+
+Run the test suite. The new tests **should fail** (since implementation doesn't exist yet). This validates:
+- Tests are checking something real (not trivially passing)
+- Tests are syntactically valid and runnable
+- Test infrastructure works
+
+**If tests pass unexpectedly**: Investigate — either the feature already exists, or tests are too loose. Tighten the tests or confirm the feature is already implemented and skip to tracker update.
+
+**If tests error (import/syntax)**: Fix the test setup (imports, fixtures, file paths), not the test assertions themselves. The assertions should remain as-is since they reflect the spec.
+
+#### Step 4: Implement to Pass Tests
+
+Delegate implementation to a sub-agent. **Key difference from the standard workflow**: include the test file path so the implementation agent knows the acceptance criteria.
+
+**For multi-file specs with breakout sections**: Pass the section file path instead of quoting the full text. The sub-agent reads the file directly.
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "sonnet",  // Use "opus" for complex logic or algorithms
+  prompt: "Implement §X.Y to make the failing tests pass.
+
+  ## Spec Requirement (§X.Y)
+  [Exact spec text — or for multi-file specs: 'Read the spec section at: path/to/sections/section-X.md']
+
+  ## Failing Tests
+  Tests at [test_file:lines] define the acceptance criteria.
+  Read them to understand what's expected.
+
+  ## Files to Modify
+  - path/to/file.py (describe what changes needed)
+
+  ## Context
+  [Any relevant existing code patterns or constraints]
+
+  ## Important
+  - Make the failing tests pass
+  - Don't modify the tests
+  - Also ensure existing tests still pass
+  - Summarize what you changed and any issues encountered
+
+  At the end of your response, include a DIGEST section:
+  === DIGEST ===
+  - Entities: <key classes, models, services touched>
+  - Patterns: <design patterns used or encountered>
+  - Complexity: <any algorithmic, state machine, auth, or business rule complexity>
+  === END DIGEST ==="
+)
+```
+
+#### Step 5a: Check DIGEST for Complexity Escalation
+
+After the implementation sub-agent completes and before running tests:
+
+1. Extract the `=== DIGEST ===` section from the sub-agent's response
+2. Check DIGEST signals against the complexity category table (see Size-Based Routing)
+3. If any category matches: dispatch opus to review the sonnet's code changes with focus on the flagged complexity area
+4. Run tests after any opus-driven changes
+
+This step only applies when the implementation sub-agent was a sonnet (multi-file routing). Skip for opus agents.
+
+#### Step 5: Run Tests — Confirm Passes
+
+Run the full test suite:
+- **New tests should now pass** — this confirms the implementation meets the spec
+- **Existing tests should still pass** — no regressions
+- If new tests still fail: fix the implementation (not the tests), then re-run
+- If a test seems genuinely wrong after seeing the implementation: **flag it for user review** rather than changing the test — the test was written from the spec, so a mismatch may indicate a spec ambiguity worth discussing
+- If existing tests break: fix the regression in the implementation
+
+#### Step 6: Update Tracker
+
+Same as the standard workflow's Step 5:
+
+1. Update the tracker file:
+   - Change status from `pending` to `complete` or `partial`
+   - Add implementation notes with file:line references
+   - Add test file references
+   - Add entry to Implementation Log
+
+2. Update the task status using TaskUpdate
+
+**Only mark as `complete` after both new and existing tests pass.**
+
+### Handling Issues in TDD Mode
+
+If the implementation sub-agent cannot make all tests pass:
+
+1. Review the failing tests against the spec to confirm they're correct
+2. If tests are correct: spawn a fix sub-agent with `model: "opus"` including both the spec text and the failing test output
+3. If a test misinterprets the spec: flag it for user review before changing it
+4. Never silently modify tests to match a wrong implementation
+
+---
+
 ## Phase 3: Verification (`/implement verify [spec-name]`)
 
 When the user requests verification:
@@ -382,7 +744,7 @@ This catches field name typos, import errors, type mismatches, and other mechani
 Read ONLY these files in the main conversation:
 1. The implementation tracker (`.impl-tracker-<name>.md`) — to understand spec structure and file references
 2. The spec document's **structure/table of contents only** — to know which sections exist
-3. **Check for previous verification reports**: `Glob("verify-*.md")` in the project directory — if one or more exist, read the **most recent** report. This triggers **re-verification mode** (see below)
+3. **Check for previous verification reports**: `Glob(".impl-verification/<spec-name>/verify-*.json")` in the project directory — if one or more exist, read the **most recent** report. This triggers **re-verification mode** (see below)
 
 **Do NOT read full spec sections or implementation files in the main conversation.** Build a plan:
 - List each spec section, its location, and what it covers
@@ -415,9 +777,27 @@ Build a flat list of all requirements to verify:
 
 A typical spec section (like §2 Functional Requirements with 15 subsections) should produce **30-60+ individual requirements**, NOT 15.
 
+### Tools Setup
+
+Before running verification sub-agents, resolve the tools directory:
+
+```bash
+REPO_DIR="$(dirname "$(readlink -f ~/.claude/skills/implement/SKILL.md)")/../.."
+TOOLS_DIR="$REPO_DIR/tools"
+PYTHON=python3
+```
+
+These variables are used in Steps 3-4 below.
+
 ### Step 3: Requirement-Level Verification via Sub-Agents (Parallel)
 
 **Each sub-agent verifies ONE requirement.** This is not a guideline — it is a hard rule.
+
+**Pre-flight**: Create the fragments directory and clear any stale markers:
+
+```bash
+mkdir -p .impl-verification/<spec-name>/fragments/ && rm -f .impl-verification/<spec-name>/fragments/*.done
+```
 
 ```python
 # Pattern: ONE requirement = ONE sub-agent
@@ -428,10 +808,11 @@ req_text = "§2.1.1: The system MUST allow adding assets by scanning a barcode. 
 # 2. Build implementation hints from tracker (if available)
 impl_hints = "Implementation tracker references: views/capture.py:30"
 
-# 3. Delegate — one requirement, one agent
+# 3. Delegate — one requirement, one agent (run_in_background: true)
 Task(
   subagent_type: "general-purpose",
   model: "opus",
+  run_in_background: true,  # MUST run in background — do NOT read TaskOutput
   prompt: """Verify implementation of ONE spec requirement against the codebase.
 
 ## Requirement: §2.1.1 — Quick Capture: Scan Barcode to Add Asset
@@ -448,22 +829,42 @@ Implementation hints (from tracker): <impl_hints>
 3. Search for test files covering this implementation (look in tests/, test_*, *_test.py, etc.)
 4. Assess test coverage: what's tested, what's missing
 
-## Report Format (use ONLY this format)
+## Output — Write findings to disk as JSON
 
-### §2.1.1 — Quick Capture: Scan Barcode
+Write your findings to: .impl-verification/<spec-name>/fragments/02-01-01.json
+(named by section number: §2.1.1 → 02-01-01.json)
 
-**Spec says**: <exact quote or summary of the requirement>
-**Status**: Implemented / Partial / Not Implemented / N/A
-**Implementation**: `file.py:123` — <brief description of how it's implemented>
-**Test coverage**: Full / Partial / None
-**Tests**: `test_file.py:45` — <what's tested>
-**Missing tests**: <what's not tested — edge cases, error paths, permission boundaries, etc.>
+Use this EXACT JSON format:
+{
+  "schema_version": "1.0.0",
+  "fragment_id": "02-01-01",
+  "section_ref": "§2.1.1",
+  "title": "Quick Capture: Scan Barcode",
+  "requirement_text": "<exact quote or summary of the requirement>",
+  "moscow": "MUST",
+  "status": "partial",
+  "implementation": {
+    "files": [{"path": "file.py", "lines": "30-45", "description": "brief desc"}],
+    "notes": "optional notes"
+  },
+  "test_coverage": "partial",
+  "tests": [{"path": "test_file.py", "lines": "10-25", "description": "what's tested"}],
+  "missing_tests": ["specific missing test"],
+  "missing_implementation": ["specific missing feature"],
+  "notes": ""
+}
 
-(The V<N> ID will be assigned by the main conversation when assembling the report.
-Use the §N.M reference as-is — the main conversation handles V-item numbering.)
+Valid values:
+- moscow: MUST, SHOULD, COULD, WONT
+- status: implemented, partial, not_implemented, na
+- test_coverage: full, partial, none
 
-Keep your response focused on findings only. Do NOT suggest fixes or implementation code.
+Keep findings focused. Do NOT suggest fixes or implementation code.
 Do NOT restate the spec beyond the brief quote. Be specific with file:line references.
+
+After writing the JSON file, write a completion marker:
+.impl-verification/<spec-name>/fragments/02-01-01.done (contents: just "done").
+The .done marker MUST be the last file you write.
 """
 )
 ```
@@ -494,80 +895,68 @@ Agent 35: §8.1.1 — Unit test coverage target
 
 Yes, this means 20-40+ parallel agents for a medium-sized spec. That's correct. Each agent runs fast (one focused search), produces precise results, and finishes quickly. The total wall-clock time is often *less* than the batched approach because agents aren't serialising through a long list of requirements internally.
 
-### Step 4: Assemble Verification Report (Main Conversation)
+### Step 4: Assemble Verification Report (Deterministic)
 
-Collect findings from sub-agents and write them directly to a report file. Do NOT accumulate all results in conversation context — write incrementally.
+**Context protection**: Do NOT call `TaskOutput` on verification agents. With 20-40+ parallel agents, reading their output would fill the context window. Instead, wait for `.done` markers, then run the Python assembly tool.
 
-Create the report at `verify-<spec-name>-<date>.md` in the project directory.
+**Wait for completion:**
 
-Each finding gets a **V-item ID** (`V1`, `V2`, ...) that persists across verification runs. V-item IDs are assigned sequentially during report assembly. On re-verification, resolved items keep their original ID for traceability.
-
-```markdown
-# Implementation Verification: <Spec Name>
-
-**Spec**: <path to spec>
-**Implementation**: <path to implementation directory>
-**Date**: <date>
-**Previous Verification**: <path to previous report, or "None — initial verification">
-**Run**: <N> (1 for initial, 2+ for re-verification)
-
-## Summary
-
-<2-3 sentence assessment of overall implementation completeness and test coverage>
-
-**Overall Implementation Status**: X of Y requirements verified
-**Test Coverage**: X of Y testable requirements have tests
-
-## Requirement-by-Requirement Verification
-
-### V1 — §N.M — <Requirement Title>
-
-**Spec says**: <exact quote>
-**Status**: Implemented / Partial / Not Implemented / N/A
-**Implementation**: `file.py:123` — <brief description>
-**Test coverage**: Full / Partial / None
-**Tests**: `test_file.py:45` — <what's tested>
-**Missing tests**: <what's not tested — edge cases, error paths, etc.>
-
-### V2 — §N.M+1 — ...
-
-## Test Coverage Summary
-
-| V-Item | Section | Requirement | Impl Status | Test Coverage | Missing Tests |
-|--------|---------|-------------|-------------|---------------|---------------|
-| V1 | §2.1 | User login | Implemented | Partial | No test for locked account |
-| V2 | §2.2 | Password reset | Implemented | Full | — |
-| V3 | §2.3 | Session timeout | Not Implemented | None | All |
-
-## Items Requiring Tests
-
-Priority list of untested or under-tested requirements:
-
-1. [HIGH] V3 — §X.Y — <requirement> — No tests at all, covers permission boundary
-2. [MEDIUM] V1 — §A.B — <requirement> — Happy path tested, missing edge cases: <list>
-3. [LOW] V5 — §C.D — <requirement> — Minor gap: <detail>
-
-## Scorecard
-
-| Metric | Score |
-|--------|-------|
-| Requirements Implemented | X / Y (Z%) |
-| Fully Tested | A / B (C%) |
-| Partially Tested | D |
-| No Tests | E |
-| Critical Gaps | F |
-
-## Priority Gaps
-
-1. [HIGH] V<N> — §X.Y — <description>
-2. [MEDIUM] V<N> — §A.B — <description>
-
-## Recommendations
-
-1. **Must add tests for**: <list critical untested items>
-2. **Implementation gaps**: <list unimplemented requirements>
-3. **Partial implementations**: <list items needing completion>
+```bash
+"$PYTHON" "$TOOLS_DIR/wait_for_done.py" --dir .impl-verification/<spec-name>/fragments/ --count <number of requirements dispatched>
 ```
+
+**Assemble the report:**
+
+```bash
+"$PYTHON" "$TOOLS_DIR/verify_report.py" \
+  --fragments-dir .impl-verification/<spec-name>/fragments/ \
+  --spec-path <spec-path> \
+  --impl-path . \
+  --project-name "<spec-name>" \
+  --output .impl-verification/<spec-name>/verify-<date>.json
+```
+
+For re-verification, add `--previous` pointing to the previous report JSON:
+
+```bash
+"$PYTHON" "$TOOLS_DIR/verify_report.py" \
+  --fragments-dir .impl-verification/<spec-name>/fragments/ \
+  --spec-path <spec-path> \
+  --impl-path . \
+  --project-name "<spec-name>" \
+  --output .impl-verification/<spec-name>/verify-<date>.json \
+  --previous .impl-verification/<spec-name>/verify-<prev-date>.json
+```
+
+This produces:
+- `.impl-verification/<spec-name>/verify-<date>.json` — machine-readable report (queryable with jq)
+- `.impl-verification/<spec-name>/verify-<date>.md` — human-readable report
+
+The tool deterministically handles:
+- Fragment validation (hard errors on missing fields / invalid enums, soft warnings on contradictions)
+- V-item ID assignment (sequential by fragment_id sort order for initial; section_ref matching for re-verification)
+- Statistics: `implementation_rate = (implemented + partial × 0.5) / (total - na)`, same for test_rate
+- Priority gap classification (high/medium/low by MoSCoW × status × test_coverage)
+- Markdown rendering with all report sections (header, summary, requirement-by-requirement, test coverage table, gaps, scorecard, recommendations)
+
+**The report format is defined in `tools/verification_schema.py:render_markdown()`.** Do not write report markdown manually — the tool handles it.
+
+**Present to user:**
+
+Read the `.md` report file (or just its Summary and Scorecard sections) and present results:
+
+> **Verification complete.** See the full report at `.impl-verification/<spec-name>/verify-<date>.md`.
+>
+> **Results**: X of Y requirements implemented, A of B have test coverage.
+> Implementation rate: Z%, Test rate: W%
+>
+> **Critical gaps** (if any):
+> - <top 3 from priority_gaps with priority "high">
+>
+> **Next steps:**
+> - Address implementation gaps (see Priority Gaps section)
+> - Add missing tests (see Items Requiring Tests section)
+> - Re-run `/implement verify` after fixes to track progress (V-item IDs are preserved across runs)
 
 ### Step 5: Fix Verification Failures
 
@@ -600,15 +989,15 @@ When verification identifies gaps or issues, **always use Opus** to fix them:
 
 4. **Repeat** until all gaps are resolved
 
-5. **Re-run tests after fixes**: Every fix must be validated by running tests again. Never claim verification is complete until tests pass.
+5. **Re-run tests after fixes**: Every fix must be validated by running tests again. Never claim verification is complete until tests pass. The updated report will be at `.impl-verification/<spec-name>/verify-<date>.md`.
 
 **Why always Opus for fixes?** Verification failures often involve subtle misunderstandings of requirements or edge cases. Opus's stronger reasoning catches these nuances and produces correct fixes the first time.
 
 ### Re-Verification Mode
 
-When a previous verification report exists (`verify-<spec-name>-*.md`), the verify command runs in **re-verification mode**. Before starting, ask the user which mode they want:
+When a previous verification report exists (`.impl-verification/<spec-name>/verify-*.json`), the verify command runs in **re-verification mode**. Before starting, ask the user which mode they want:
 
-> I found a previous verification report (`verify-<date>.md`) with X open V-items.
+> I found a previous verification report (`.impl-verification/<spec-name>/verify-<date>.md`) with X open V-items.
 >
 > How would you like to proceed?
 > 1. **Re-verify from where we left off** — Check only the open V-items from the previous run, plus spot-check for regressions (faster, cheaper)
@@ -661,18 +1050,37 @@ When a previous verification report exists (`verify-<spec-name>-*.md`), the veri
    3. Search for the current implementation if the file/line has changed
    4. Re-assess test coverage for this requirement
 
-   ## Report Format
+   ## Output — Write findings to disk as JSON
 
-   ### V12 — §3.2 — AI Thumbnail Generation
+   Write your findings to: .impl-verification/<spec-name>/fragments/03-02.json
 
-   **Previous status**: Partial
-   **Current status**: Implemented / Partial / Not Implemented
-   **Resolution**: FIXED / PARTIALLY FIXED / NOT FIXED
-   **What changed**: <describe what was fixed, or why it's still open>
-   **Implementation**: `file.py:123` — <current implementation>
-   **Test coverage**: Full / Partial / None
-   **Tests**: `test_file.py:45` — <what's tested>
-   **Missing tests**: <what's still not tested>
+   Use this EXACT JSON format:
+   {
+     "schema_version": "1.0.0",
+     "fragment_id": "03-02",
+     "section_ref": "§3.2",
+     "title": "AI Thumbnail Generation",
+     "requirement_text": "<the spec requirement text>",
+     "moscow": "MUST",
+     "status": "implemented",
+     "v_item_id": "V12",
+     "previous_status": "partial",
+     "resolution": "fixed",
+     "implementation": {
+       "files": [{"path": "file.py", "lines": "123", "description": "current implementation"}],
+       "notes": ""
+     },
+     "test_coverage": "full",
+     "tests": [{"path": "test_file.py", "lines": "45", "description": "what's tested"}],
+     "missing_tests": [],
+     "missing_implementation": [],
+     "notes": "Describe what changed or why it's still open"
+   }
+
+   Valid resolution values: fixed, partially_fixed, not_fixed, regressed
+
+   After writing the JSON, write a completion marker:
+   .impl-verification/<spec-name>/fragments/03-02.done (contents: just "done").
    """
    )
    ```
@@ -716,7 +1124,7 @@ Follow these rules strictly to avoid token waste:
 3. **Sub-agents DO read implementation files** — they need to search the codebase to verify
 4. **Cap sub-agent output** — structured findings only, no verbose analysis or code suggestions
 5. **One requirement per sub-agent** — don't overload agents with entire sections
-6. **Write findings directly to the report file** — don't accumulate results in main conversation context
+6. **Do NOT call TaskOutput on verification agents** — wait for `.done` markers, then run `verify_report.py` for deterministic assembly
 
 ### Definition of Done
 
@@ -775,10 +1183,63 @@ When resuming work:
 ### Resume Work
 
 1. Read the tracker file to understand current state
-2. Read the task list
-3. Identify the next pending task
-4. **Re-read the relevant spec sections** before continuing
-5. Resume implementation
+2. **Spec freshness check** — detect whether the spec has changed since the last session:
+   - **Multi-file specs**: Re-run `wc -c path/to/sections/*.md` and compare against the stored Structural Index in the tracker:
+     - **New files**: Files present on disk but not in the index (including new sub-splits like `02d-`)
+     - **Removed files**: Files in the index but no longer on disk
+     - **Size changes**: Any file whose byte count changed by >20% from the stored value
+     - **Sub-split patterns**: A previously single file now has letter-suffix variants (e.g., `02.md` → `02a-`, `02b-`)
+   - **Single-file specs**: Compare the file size (via `wc -c`) against the value stored in the tracker's `**Spec Baseline**` date — if the file's modification time is newer than the baseline date, flag it
+   - **STRUCT check**: Look for `.spec-tracker-*.md` files (from the `/spec` skill) and check for a `## Pending Structural Changes` section — this indicates the spec author flagged structural issues that affect implementation
+   - **When changes detected**: Present the user with 3 options (see **Spec Evolution Handling** below)
+   - **When no changes detected**: Proceed silently
+3. **Check the `**TDD Mode**:` field** — use the TDD workflow (Phase 2 TDD Mode) or standard workflow accordingly. If the field is missing (tracker created before TDD mode existed), check preferences to determine the mode and update the tracker.
+4. Read the task list
+5. Identify the next pending task
+6. **Re-read the relevant spec sections** before continuing
+7. Resume implementation using the appropriate workflow
+
+---
+
+## Spec Evolution Handling
+
+When the spec freshness check (Phase 5, step 2) detects changes, present the user with these options:
+
+### Option 1: Re-scan affected sections
+
+Re-read only the changed/new section files. For each:
+1. Extract requirements and compare against the existing Requirements Matrix
+2. **New requirements**: Add rows with status `pending`
+3. **Removed requirements**: Mark rows as `n/a` with a note ("removed in spec update YYYY-MM-DD")
+4. **Changed requirements**: Flag the row as `needs_review` and note the change
+5. Update the Structural Index with current file sizes
+6. Update `**Spec Baseline**` date
+7. Create new tasks for any added requirements
+
+This is the best option when spec changes are localized (a few sections updated or split).
+
+### Option 2: Proceed as-is
+
+Acknowledge the changes without re-scanning. Log the detected changes in the Implementation Log:
+
+```markdown
+### YYYY-MM-DD - Spec changes detected (acknowledged, not re-scanned)
+- New files: <list>
+- Removed files: <list>
+- Size changes: <list with old→new bytes>
+- User chose to proceed without re-scanning
+```
+
+Continue with the current tracker state. This is appropriate when the user knows the changes don't affect in-progress work.
+
+### Option 3: Full re-plan
+
+Archive the current tracker with a date suffix (e.g., `.impl-tracker-myspec-archived-2025-01-15.md`), then re-run Phase 1 from scratch. Carry forward:
+- Completed work from the archived tracker (mark as `complete` in the new tracker)
+- Known gaps and deviations
+- Implementation Log entries (summarized)
+
+This is appropriate when spec changes are extensive or structural (major sections reorganized, new sections added).
 
 ---
 
@@ -872,7 +1333,20 @@ Parse it as follows:
 - If it starts with `verify`: Run verification (optional spec-name follows)
 - If it starts with `continue`: Resume work (optional spec-name follows)
 - If it's `list`: List all `.impl-tracker-*.md` files with their spec paths and status summaries
+- If it starts with `config`: Handle preferences (see below)
 - If empty: Follow the **empty arguments procedure** below
+
+### Config Arguments
+
+When arguments start with `config`:
+- `config` alone: Read and display current effective preferences (project file, global file, and built-in defaults)
+- `config <setting> <value>`: Update `<setting>` to `<value>` in the **project-level** preferences file (`.impl-preferences.md`)
+- `config --global <setting> <value>`: Update `<setting>` to `<value>` in the **global** preferences file (`~/.claude/.impl-preferences.md`)
+
+Valid settings and values:
+- `tdd`: `on`, `off`, or `ask`
+
+Before updating, validate that the value is one of the valid options for the given setting. If invalid, inform the user and list the valid values.
 
 ### Empty Arguments Procedure
 
