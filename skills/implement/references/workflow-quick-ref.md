@@ -17,6 +17,7 @@ This single habit prevents most implementation drift.
 | `/implement verify [name]` | After completing work, before delivery |
 | `/implement continue [name]` | Resuming after a break or new session |
 | `/implement list` | See all active implementations |
+| `/implement config` | View or update preferences (e.g., TDD mode) |
 
 **Note**: `[name]` is optional - if you have multiple trackers, you can specify which one (e.g., `/implement status billing-spec`).
 
@@ -30,6 +31,16 @@ Before starting any task:
 - [ ] Open and read those sections from the spec
 - [ ] Note any specific formats, constraints, or edge cases mentioned
 - [ ] Check the tracker for related completed work
+- [ ] Check the tracker's `**TDD Mode**:` field to determine the workflow
+
+### If TDD Mode is ON:
+
+- [ ] Write tests first from the spec (sub-agent sees spec only, no implementation)
+- [ ] Run tests — confirm they fail (validates tests check something real)
+- [ ] Implement to make failing tests pass (sub-agent receives test file path)
+- [ ] Run tests — confirm all pass (new + existing)
+- [ ] If a test seems wrong: flag for user review, don't silently change it
+- [ ] After tests pass, continue with the Post-Task Checklist below (linting, tracker update, etc.)
 
 ---
 
@@ -37,6 +48,7 @@ Before starting any task:
 
 After completing any task:
 
+- [ ] **Check DIGEST** (if sonnet sub-agent): extract `=== DIGEST ===`, check against complexity categories, dispatch opus review if matched
 - [ ] **Run tests** for the changed code (pytest, npm test, etc.)
 - [ ] **Fix any test failures** before marking complete
 - [ ] **Run linting/type checks** if configured (mypy, flake8, eslint, tsc)
@@ -65,16 +77,17 @@ During verification:
 - [ ] A section with 15 subsections should produce 30-60+ requirements, NOT 15
 
 **THEN - Verify at requirement level (parallel sub-agents):**
+- [ ] Pre-flight: `mkdir -p .impl-verification/<name>/fragments/ && rm -f .impl-verification/<name>/fragments/*.done`
 - [ ] ONE requirement = ONE sub-agent (hard rule)
-- [ ] Each agent: search codebase, verify implementation, check test coverage
-- [ ] Each agent reports: Status, Implementation file:line, Test coverage, Missing tests
-- [ ] Do NOT batch sections into one agent — this produces shallow findings
+- [ ] Each agent writes JSON fragment + `.done` marker to `.impl-verification/<name>/fragments/`
+- [ ] Use `run_in_background: true` — do NOT read TaskOutput
 - [ ] Check for previous verify reports — triggers re-verification mode if found
 
-**THEN - Assemble report:**
-- [ ] Assign V-item IDs (V1, V2, ...) — persistent across re-verification runs
-- [ ] Write findings directly to report file (don't accumulate in context)
-- [ ] Include scorecard: requirements implemented, test coverage, critical gaps
+**THEN - Assemble report (deterministic):**
+- [ ] Wait: `"$PYTHON" "$TOOLS_DIR/wait_for_done.py" --dir .impl-verification/<name>/fragments/ --count <N>`
+- [ ] Assemble: `"$PYTHON" "$TOOLS_DIR/verify_report.py" --fragments-dir ... --output ...`
+- [ ] Read the `.md` output to present summary to user
+- [ ] For re-verification: add `--previous` flag pointing to previous report JSON
 
 **Never claim verification is complete if tests are failing.**
 
@@ -184,15 +197,34 @@ Task(
 
 ### After Sub-Agent Returns
 
-1. **Run tests** for affected code
-2. Fix any test failures (use Opus for complex fixes)
-3. Run linting/type checks
-4. Only then update tracker as complete
+1. Sub-agent output comes via `TaskOutput` — use that directly
+2. **Do NOT read or grep agent output files** — they are raw JSON transcripts, not usable text
+3. **Run tests** for affected code
+4. Fix any test failures (use Opus for complex fixes)
+5. Run linting/type checks
+6. Only then update tracker as complete
 
 ```
 # Example test run after implementation
 Bash("pytest tests/test_affected_module.py -v")
 ```
+
+---
+
+## Large Spec Handling
+
+When the spec has breakout section files (e.g., from `/spec`):
+
+1. **Detect**: Look for `<!-- EXPANDED:` markers or `sections/` directory
+2. **Build structural index**: `wc -c path/to/sections/*.md` → `estimated_tokens ≈ bytes / 4`
+   - Sub-split files (`02a-`, `02b-`, `02c-`) are discovered by the same glob — group them under their parent section number
+3. **Read only headings + requirement IDs** into main context (not full section prose)
+4. **Pass file paths to sub-agents** — they read section files themselves
+5. **Route by section size**: <5k tokens → sonnet (group 2-3), 5k-20k → sonnet (1 each), >20k → opus (1 each)
+   - Sub-split sections route independently by own size; tasks referencing the parent section include all sub-file paths
+6. **Digest-based escalation**: Sonnet agents produce a `=== DIGEST ===` at end of response. Check DIGEST against complexity categories (algorithms, state machines, permission/auth, complex business rules, cross-cutting). If matched → **mandatory** opus review of sonnet's changes
+
+**Single-file specs**: Read the full file as normal — no structural index needed.
 
 ---
 
@@ -203,11 +235,13 @@ When starting or resuming work:
 1. **Check for compaction**: If you feel uncertain about the implementation context, you may have experienced compaction
 2. Run `/implement list` to see active implementations
 3. Read the appropriate `.impl-tracker-<spec-name>.md`
-4. **Read the Recovery Instructions** section in the tracker if you're unsure of the workflow
-5. Run `TaskList` to see pending tasks
-6. Pick the next task
-7. Read the spec sections for that task
-8. Delegate to sub-agent for implementation
+4. **Spec freshness check**: Compare current spec files against the stored Structural Index (multi-file) or baseline date (single-file). Look for new/removed files, >20% size changes, or new sub-split patterns. If changes detected, present user with options: re-scan affected sections, proceed as-is, or full re-plan.
+5. **STRUCT check**: Look for `.spec-tracker-*.md` with `## Pending Structural Changes` — warn user if found
+6. **Read the Recovery Instructions** section in the tracker if you're unsure of the workflow
+7. Run `TaskList` to see pending tasks
+8. Pick the next task
+9. Read the spec sections for that task
+10. Delegate to sub-agent for implementation
 
 ### Recognizing Compaction
 
