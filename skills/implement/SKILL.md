@@ -177,6 +177,16 @@ When delegating implementation work:
 
 When the user provides a spec path, follow these steps:
 
+### Step 0: Offer to Clear Context
+
+Before doing any work, ask the user if they'd like to clear the conversation context first. Implementation benefits from a clean context window — especially when invoked after a pipeline of other work (triage, spec-patching, etc.).
+
+> Starting implementation planning. Would you like to clear context first? This gives the implementation maximum context window.
+>
+> If yes, run `/clear` then re-invoke `/implement <spec-path>`.
+
+If the user declines or wants to continue, proceed to Step 1. Do not ask again if the skill is re-invoked after a `/clear`.
+
 ### Step 1: Read and Parse the Specification
 
 **Worktree detection**: After reading the spec/brief document, determine whether it indicates that implementation work should happen in a specific directory — typically a git worktree. Look for any mention of:
