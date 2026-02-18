@@ -754,7 +754,7 @@ This catches field name typos, import errors, type mismatches, and other mechani
 2. If not provided: List all `.impl-tracker-*.md` files in current directory
    - If exactly one: use it
    - If multiple: show list and ask which one
-   - If none: inform user no active implementations found
+   - If none: also search any worktree paths found in other trackers (handles invocation from the main repo root when the tracker lives in a worktree). If still none, inform user no active implementations found.
 
 ### Step 1: Build the Verification Plan (Main Conversation)
 
@@ -1171,7 +1171,7 @@ When the user requests status:
 2. If not provided: List all `.impl-tracker-*.md` files in current directory
    - If exactly one: use it
    - If multiple: show list and ask which one
-   - If none: inform user no active implementations found
+   - If none: also search any worktree paths found in other trackers. If still none, inform user no active implementations found.
 
 ### Show Status
 
@@ -1195,7 +1195,7 @@ When resuming work:
 2. If not provided: List all `.impl-tracker-*.md` files in current directory
    - If exactly one: use it
    - If multiple: show list and ask which one
-   - If none: inform user no active implementations found
+   - If none: also search any worktree paths found in other trackers. If still none, inform user no active implementations found.
 
 ### Resume Work
 
@@ -1276,7 +1276,7 @@ You may have experienced compaction if:
 
 If you suspect compaction has occurred:
 
-1. **Check for tracker files**: Look for `.impl-tracker-*.md` in the current directory
+1. **Check for tracker files**: Look for `.impl-tracker-*.md` in the current directory and any known worktree paths
    ```
    Glob(".impl-tracker-*.md")
    ```
@@ -1369,7 +1369,7 @@ Before updating, validate that the value is one of the valid options for the giv
 
 When `$ARGUMENTS` is empty:
 
-1. Check for existing trackers (`.impl-tracker-*.md` in current directory)
+1. Check for existing trackers (`.impl-tracker-*.md` in current directory and any known worktree paths)
    - If exactly one exists: offer to continue implementation
    - If multiple exist: show list and ask which to continue
 2. If no trackers exist:
@@ -1380,6 +1380,6 @@ When `$ARGUMENTS` is empty:
 
 ### Tracker Discovery
 
-To find trackers, glob for `.impl-tracker-*.md` in the current directory. Each tracker contains a `**Specification**:` line that points back to the original spec file.
+To find trackers, glob for `.impl-tracker-*.md` in the current directory. If a tracker's `**Worktree**` field points to a different directory, also search there. Each tracker contains a `**Specification**:` line that points back to the original spec file and a `**Worktree**:` line that identifies the implementation directory.
 
 Arguments: $ARGUMENTS
