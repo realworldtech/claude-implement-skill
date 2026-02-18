@@ -350,7 +350,7 @@ After the user approves the plan (and chooses a workflow if `ask` mode):
 ### Pre-Implementation Check
 
 **Before writing any implementation code**, verify:
-1. A tracker file (`.impl-tracker-*.md`) exists in the current directory
+1. A tracker file (`.impl-tracker-*.md`) exists in the implementation directory (worktree or current directory)
 2. The tracker has a populated Requirements Matrix
 3. Tasks have been created via TaskCreate
 
