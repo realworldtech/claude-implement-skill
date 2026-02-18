@@ -25,11 +25,40 @@ Task(
   ## Context
   [Any relevant existing code patterns or constraints]
 
+  ## Before You Begin
+
+  If anything is unclear about the requirements, the test expectations, or
+  constraints — ask. It's better to clarify now than to implement the wrong thing.
+
+  ## While You Work
+
+  If you encounter something unexpected or need to make a judgment call, ask rather
+  than guess. Don't make assumptions about ambiguous requirements.
+
   ## Important
   - Make the failing tests pass
   - Don't modify the tests
   - Also ensure existing tests still pass
-  - Summarize what you changed and any issues encountered
+
+  ## Before Reporting Back: Self-Review
+
+  Before you report, review your own work:
+
+  **Completeness**: Did I implement everything needed to satisfy both the spec
+  and the tests? Are there edge cases I missed?
+
+  **Quality**: Are names clear and accurate? Is the code clean and maintainable?
+  Does it follow existing patterns in the codebase?
+
+  **Discipline**: Did I avoid overbuilding (YAGNI)? Did I only build what was
+  needed to pass the tests and satisfy the spec?
+
+  If you find issues during self-review, fix them before reporting.
+
+  ## Report Format
+
+  Summarize: what you implemented, files changed, any issues or concerns,
+  and self-review findings (if any).
 
   At the end of your response, include a DIGEST section:
   === DIGEST ===

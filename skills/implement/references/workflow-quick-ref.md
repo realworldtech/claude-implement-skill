@@ -52,6 +52,8 @@ After completing any task:
 - [ ] **Run tests** for the changed code (pytest, npm test, etc.)
 - [ ] **Fix any test failures** before marking complete
 - [ ] **Run linting/type checks** if configured (mypy, flake8, eslint, tsc)
+- [ ] **Spec compliance check** (optional): run `prompts/spec-compliance-check.md` for non-trivial tasks
+- [ ] **Commit** (if in a git repo): atomic commit for this task's changes — makes rollback easier
 - [ ] Update tracker: change status, add file:line reference
 - [ ] Add Implementation Log entry
 - [ ] Note any gaps or ambiguities discovered

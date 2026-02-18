@@ -30,7 +30,38 @@ Task(
   ## Expected Outcome
   - [Describe what the implementation should do]
 
-  After implementation, summarize what you changed and any issues encountered.
+  ## Before You Begin
+
+  If anything is unclear about the requirements, approach, or constraints — ask.
+  It's better to clarify now than to implement the wrong thing.
+
+  ## While You Work
+
+  If you encounter something unexpected or need to make a judgment call, ask rather
+  than guess. Don't make assumptions about ambiguous requirements.
+
+  ## Before Reporting Back: Self-Review
+
+  Before you report, review your own work:
+
+  **Completeness**: Did I implement everything the spec requires for this section?
+  Are there edge cases or constraints I missed?
+
+  **Quality**: Are names clear and accurate? Is the code clean and maintainable?
+  Does it follow existing patterns in the codebase?
+
+  **Discipline**: Did I avoid overbuilding (YAGNI)? Did I only build what was
+  requested? No extra features, no speculative abstractions?
+
+  **Testing readiness**: Will this be straightforward to test? Are there any
+  hidden dependencies that will make testing difficult?
+
+  If you find issues during self-review, fix them before reporting.
+
+  ## Report Format
+
+  Summarize: what you implemented, files changed, any issues or concerns,
+  and self-review findings (if any).
 
   At the end of your response, include a DIGEST section:
   === DIGEST ===

@@ -52,13 +52,27 @@ After the implementation sub-agent completes:
    - If any category matches: dispatch opus to review the sonnet's code changes
    - Run tests again after any opus-driven changes
 
+### Step 3a: Spec Compliance Check (Optional)
+
+After tests pass, optionally run a lightweight spec compliance check using the prompt template at `prompts/spec-compliance-check.md`. This catches implementation drift early rather than waiting for Phase 3.
+
+**Recommended for**: tasks involving multiple requirements, complex logic, or sonnet-implemented work. **Skip for**: trivially simple tasks or when Phase 3 verification is imminent.
+
 ### Step 4: Write Tests for New Functionality
 
 After the implementation is reviewed and existing tests pass, delegate test writing using the prompt template at `prompts/write-tests.md`.
 
 After the test sub-agent completes, **run the full test suite** to confirm both new and existing tests pass.
 
-### Step 5: Update Tracker
+### Step 5: Commit (If in a Git Repo)
+
+If the project is a git repository, create an atomic commit for this task's changes. This makes it easier to review, revert, or cherry-pick individual tasks.
+
+- Stage only the files changed by this task (implementation + tests)
+- Use a descriptive commit message referencing the section: e.g., `feat: implement merge detection (§2.4)`
+- If not in a git repo, skip this step
+
+### Step 6: Update Tracker
 
 **Only update to `complete` after implementation is verified AND tests pass.**
 

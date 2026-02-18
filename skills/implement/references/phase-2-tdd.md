@@ -57,7 +57,7 @@ After the implementation sub-agent completes and before running tests:
 
 This step only applies when the implementation sub-agent was a sonnet. Skip for opus agents.
 
-### Step 5: Run Tests — Confirm Passes
+### Step 5: Run Tests — Confirm Passes and Spec Compliance Check
 
 Run the full test suite:
 - **New tests should now pass** — confirms implementation meets the spec
@@ -66,9 +66,23 @@ Run the full test suite:
 - If a test seems genuinely wrong: **flag it for user review** rather than changing the test
 - If existing tests break: fix the regression in the implementation
 
-### Step 6: Update Tracker
+### Step 5b: Spec Compliance Check (Optional)
 
-Same as the standard workflow's Step 5 — see `references/phase-2-implementation.md`.
+After tests pass, optionally run a lightweight spec compliance check using the prompt template at `prompts/spec-compliance-check.md`. This catches implementation drift early rather than waiting for Phase 3.
+
+**Recommended for**: tasks involving multiple requirements, complex logic, or sonnet-implemented work. **Skip for**: trivially simple tasks or when Phase 3 verification is imminent.
+
+### Step 6: Commit (If in a Git Repo)
+
+If the project is a git repository, create an atomic commit for this task's changes. This makes it easier to review, revert, or cherry-pick individual tasks.
+
+- Stage only the files changed by this task (tests + implementation)
+- Use a descriptive commit message referencing the section: e.g., `feat: implement merge detection (§2.4)`
+- If not in a git repo, skip this step
+
+### Step 7: Update Tracker
+
+Same as the standard workflow's Step 6 — see `references/phase-2-implementation.md`.
 
 **Only mark as `complete` after both new and existing tests pass.**
 

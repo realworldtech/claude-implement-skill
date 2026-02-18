@@ -22,6 +22,11 @@ Task(
   ## Project Test Conventions
   [Show existing test patterns/framework setup from the project]
 
+  ## Before You Begin
+
+  If anything is unclear about the spec requirements or how to test them — ask.
+  It's better to clarify now than to write tests that don't match the intent.
+
   ## Important
   - Write tests from the SPEC, not from any existing code
   - Tests should be specific enough to catch wrong implementations

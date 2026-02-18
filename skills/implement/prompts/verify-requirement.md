@@ -28,13 +28,25 @@ Task(
 
 <paste the single requirement text — NOT the whole §2.1 subsection>
 
+## CRITICAL: Verify Independently — Do Not Trust Hints
+
+The tracker hints below are what the implementer *claimed* they built. They may be
+incomplete, inaccurate, point to the wrong code, or describe something that was only
+partially implemented. You MUST verify everything by reading the actual code.
+
+- Do NOT assume the tracker hints are correct
+- Do NOT assume the requirement is implemented just because a file is referenced
+- DO search broadly — the implementation may be in unexpected files
+- DO read the code critically — check that it actually satisfies the requirement,
+  not just that something vaguely related exists
+
 ## Implementation Search Instructions
 
 Search directory: <implementation_dir>
-Implementation hints (from tracker): <impl_hints>
+Implementation hints (from tracker — verify, don't trust): <impl_hints>
 
 1. Search the codebase for code that implements this requirement (use Grep/Glob to find relevant files)
-2. Read the implementation files to confirm they satisfy the requirement
+2. Read the implementation files to confirm they actually satisfy the requirement — not just that code exists
 3. Search for test files covering this implementation (look in tests/, test_*, *_test.py, etc.)
 4. Assess test coverage: what's tested, what's missing
 
@@ -70,6 +82,9 @@ Valid values:
 
 Keep findings focused. Do NOT suggest fixes or implementation code.
 Do NOT restate the spec beyond the brief quote. Be specific with file:line references.
+
+Be skeptical. If code exists but doesn't fully satisfy the requirement, mark it
+as partial — don't give benefit of the doubt.
 
 After writing the JSON file, write a completion marker:
 .impl-verification/<spec-name>/fragments/02-01-01.done (contents: just "done").

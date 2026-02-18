@@ -22,6 +22,11 @@ Task(
   ## Existing Test Patterns
   [Show an example from the existing test suite so tests match project conventions]
 
+  ## Before You Begin
+
+  If anything is unclear about what to test or how the implementation should
+  behave — ask. It's better to clarify now than to write tests against wrong assumptions.
+
   ## Guidelines
   - Each test should verify a specific spec requirement or behavior
   - Do not write trivial or boilerplate tests

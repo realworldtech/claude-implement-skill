@@ -22,12 +22,22 @@ V12 — §3.2 — AI Thumbnail Generation
 
 <paste the spec requirement text>
 
+## CRITICAL: Verify Independently — Do Not Assume Fixed
+
+The previous finding may have been addressed, partially addressed, or not addressed
+at all. Do NOT assume progress was made — verify by reading the actual code.
+
+- A "fix" commit may not actually fix the issue
+- The file/line references may have shifted
+- New code may introduce different problems while claiming to fix the original
+
 ## Instructions
 
 1. Read the implementation file(s) referenced in the previous finding
-2. Check if the specific issue has been addressed
+2. Check if the specific issue has actually been addressed — read the code, don't trust commit messages
 3. Search for the current implementation if the file/line has changed
 4. Re-assess test coverage for this requirement
+5. If the issue appears fixed, verify it's fully fixed — not just partially patched
 
 ## Output — Write findings to disk as JSON
 

@@ -18,7 +18,15 @@ Task(
   [What exists now at file:line]
 
   ## Expected Fix
-  [What needs to change]"
+  [What needs to change]
+
+  ## Before You Begin
+
+  If anything is unclear about the problem or the expected fix — ask.
+  Read the current code and the spec carefully before making changes.
+  Don't assume the problem description is complete — verify it yourself.
+
+  Summarize what you changed and confirm the fix addresses the spec requirement."
 )
 ```
 
