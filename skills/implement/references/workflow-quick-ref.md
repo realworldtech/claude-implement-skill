@@ -274,7 +274,8 @@ Implementation is ONLY complete when ALL of these are true:
 - [ ] **No lint/type errors**: Code passes all configured checks
 - [ ] **Code runs**: Application starts/compiles without errors
 - [ ] **Spec verification complete**: All requirements implemented or documented as N/A
-- [ ] **Tracker updated**: Requirements matrix reflects final state
+- [ ] **Tracker updated**: Requirements matrix reflects final state with file:line references
+- [ ] **Gaps documented**: Any remaining gaps are documented with severity and rationale
 
 **If no test suite exists**, at minimum:
 - Import/load main modules to check for syntax errors
