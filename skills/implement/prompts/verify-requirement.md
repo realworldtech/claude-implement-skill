@@ -52,7 +52,7 @@ Implementation hints (from tracker — verify, don't trust): <impl_hints>
 
 ## Output — Write findings to disk as JSON
 
-Write your findings to: .impl-verification/<spec-name>/fragments/02-01-01.json
+Write your findings to: <implementation_dir>/.impl-verification/<spec-name>/fragments/02-01-01.json
 (named by section number: §2.1.1 → 02-01-01.json)
 
 Use this EXACT JSON format:
@@ -87,7 +87,7 @@ Be skeptical. If code exists but doesn't fully satisfy the requirement, mark it
 as partial — don't give benefit of the doubt.
 
 After writing the JSON file, write a completion marker:
-.impl-verification/<spec-name>/fragments/02-01-01.done (contents: just "done").
+<implementation_dir>/.impl-verification/<spec-name>/fragments/02-01-01.done (contents: just "done").
 The .done marker MUST be the last file you write.
 """
 )

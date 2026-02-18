@@ -31,7 +31,9 @@ at all. Do NOT assume progress was made — verify by reading the actual code.
 - The file/line references may have shifted
 - New code may introduce different problems while claiming to fix the original
 
-## Instructions
+## Implementation Search Instructions
+
+Search directory: <implementation_dir>
 
 1. Read the implementation file(s) referenced in the previous finding
 2. Check if the specific issue has actually been addressed — read the code, don't trust commit messages
@@ -41,7 +43,7 @@ at all. Do NOT assume progress was made — verify by reading the actual code.
 
 ## Output — Write findings to disk as JSON
 
-Write your findings to: .impl-verification/<spec-name>/fragments/03-02.json
+Write your findings to: <implementation_dir>/.impl-verification/<spec-name>/fragments/03-02.json
 
 Use this EXACT JSON format:
 {
@@ -69,7 +71,7 @@ Use this EXACT JSON format:
 Valid resolution values: fixed, partially_fixed, not_fixed, regressed
 
 After writing the JSON, write a completion marker:
-.impl-verification/<spec-name>/fragments/03-02.done (contents: just "done").
+<implementation_dir>/.impl-verification/<spec-name>/fragments/03-02.done (contents: just "done").
 """
 )
 ```

@@ -14,6 +14,9 @@ Task(
   - **Current state**: [what exists at file:line]
   - **What's missing**: [from verification report]
 
+  ## Working Directory
+  Work in: <implementation_dir>
+
   ## Task
   1. Read the current implementation
   2. Understand why it doesn't meet the spec

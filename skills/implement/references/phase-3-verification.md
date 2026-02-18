@@ -32,12 +32,20 @@
    - If multiple: show list and ask which one
    - If none: inform user no active implementations found
 
+## Resolve the Implementation Directory
+
+After finding the tracker, check its `**Worktree**` field:
+- If not `none`: validate the worktree path exists and use it as the **implementation directory** for all subsequent steps (tests, verification artifacts, sub-agent search paths)
+- If `none`: use the current working directory
+
+All paths below that reference `.impl-verification/`, `--impl-path`, or `Search directory:` should resolve relative to the **implementation directory**, not necessarily the current working directory.
+
 ## Step 1: Build the Verification Plan (Main Conversation)
 
 Read ONLY these files in the main conversation:
 1. The implementation tracker (`.impl-tracker-<name>.md`) — to understand spec structure and file references
 2. The spec document's **structure/table of contents only** — to know which sections exist
-3. **Check for previous verification reports**: `Glob(".impl-verification/<spec-name>/verify-*.json")` in the project directory — if one or more exist, read the **most recent** report. This triggers **re-verification mode** (see below)
+3. **Check for previous verification reports**: `Glob("<impl-dir>/.impl-verification/<spec-name>/verify-*.json")` — if one or more exist, read the **most recent** report. This triggers **re-verification mode** (see below)
 
 **Do NOT read full spec sections or implementation files in the main conversation.**
 
@@ -78,8 +86,10 @@ PYTHON=python3
 **Pre-flight**: Create the fragments directory and clear any stale markers:
 
 ```bash
-mkdir -p .impl-verification/<spec-name>/fragments/ && rm -f .impl-verification/<spec-name>/fragments/*.done
+mkdir -p <impl-dir>/.impl-verification/<spec-name>/fragments/ && rm -f <impl-dir>/.impl-verification/<spec-name>/fragments/*.done
 ```
+
+Where `<impl-dir>` is the implementation directory resolved above (worktree path or cwd).
 
 Dispatch verification sub-agents using the prompt template at `prompts/verify-requirement.md`. **One requirement per sub-agent** — this is a hard rule. See the prompt template for the full dispatch pattern, JSON format, and granularity examples.
 
@@ -90,41 +100,41 @@ Dispatch verification sub-agents using the prompt template at `prompts/verify-re
 **Wait for completion:**
 
 ```bash
-"$PYTHON" "$TOOLS_DIR/wait_for_done.py" --dir .impl-verification/<spec-name>/fragments/ --count <number of requirements dispatched>
+"$PYTHON" "$TOOLS_DIR/wait_for_done.py" --dir <impl-dir>/.impl-verification/<spec-name>/fragments/ --count <number of requirements dispatched>
 ```
 
 **Assemble the report:**
 
 ```bash
 "$PYTHON" "$TOOLS_DIR/verify_report.py" \
-  --fragments-dir .impl-verification/<spec-name>/fragments/ \
+  --fragments-dir <impl-dir>/.impl-verification/<spec-name>/fragments/ \
   --spec-path <spec-path> \
-  --impl-path . \
+  --impl-path <impl-dir> \
   --project-name "<spec-name>" \
-  --output .impl-verification/<spec-name>/verify-<date>.json
+  --output <impl-dir>/.impl-verification/<spec-name>/verify-<date>.json
 ```
 
 For re-verification, add `--previous` pointing to the previous report JSON:
 
 ```bash
 "$PYTHON" "$TOOLS_DIR/verify_report.py" \
-  --fragments-dir .impl-verification/<spec-name>/fragments/ \
+  --fragments-dir <impl-dir>/.impl-verification/<spec-name>/fragments/ \
   --spec-path <spec-path> \
-  --impl-path . \
+  --impl-path <impl-dir> \
   --project-name "<spec-name>" \
-  --output .impl-verification/<spec-name>/verify-<date>.json \
-  --previous .impl-verification/<spec-name>/verify-<prev-date>.json
+  --output <impl-dir>/.impl-verification/<spec-name>/verify-<date>.json \
+  --previous <impl-dir>/.impl-verification/<spec-name>/verify-<prev-date>.json
 ```
 
 This produces:
-- `.impl-verification/<spec-name>/verify-<date>.json` — machine-readable report
-- `.impl-verification/<spec-name>/verify-<date>.md` — human-readable report
+- `<impl-dir>/.impl-verification/<spec-name>/verify-<date>.json` — machine-readable report
+- `<impl-dir>/.impl-verification/<spec-name>/verify-<date>.md` — human-readable report
 
 **The report format is defined in `tools/verification_schema.py:render_markdown()`.** Do not write report markdown manually.
 
 **Present to user:**
 
-> **Verification complete.** See the full report at `.impl-verification/<spec-name>/verify-<date>.md`.
+> **Verification complete.** See the full report at `<impl-dir>/.impl-verification/<spec-name>/verify-<date>.md`.
 >
 > **Results**: X of Y requirements implemented, A of B have test coverage.
 > Implementation rate: Z%, Test rate: W%

@@ -79,14 +79,14 @@ During verification:
 - [ ] A section with 15 subsections should produce 30-60+ requirements, NOT 15
 
 **THEN - Verify at requirement level (parallel sub-agents):**
-- [ ] Pre-flight: `mkdir -p .impl-verification/<name>/fragments/ && rm -f .impl-verification/<name>/fragments/*.done`
+- [ ] Pre-flight: `mkdir -p <impl-dir>/.impl-verification/<name>/fragments/ && rm -f <impl-dir>/.impl-verification/<name>/fragments/*.done`
 - [ ] ONE requirement = ONE sub-agent (hard rule)
-- [ ] Each agent writes JSON fragment + `.done` marker to `.impl-verification/<name>/fragments/`
+- [ ] Each agent writes JSON fragment + `.done` marker to `<impl-dir>/.impl-verification/<name>/fragments/`
 - [ ] Use `run_in_background: true` — do NOT read TaskOutput
 - [ ] Check for previous verify reports — triggers re-verification mode if found
 
 **THEN - Assemble report (deterministic):**
-- [ ] Wait: `"$PYTHON" "$TOOLS_DIR/wait_for_done.py" --dir .impl-verification/<name>/fragments/ --count <N>`
+- [ ] Wait: `"$PYTHON" "$TOOLS_DIR/wait_for_done.py" --dir <impl-dir>/.impl-verification/<name>/fragments/ --count <N>`
 - [ ] Assemble: `"$PYTHON" "$TOOLS_DIR/verify_report.py" --fragments-dir ... --output ...`
 - [ ] Read the `.md` output to present summary to user
 - [ ] For re-verification: add `--previous` flag pointing to previous report JSON
