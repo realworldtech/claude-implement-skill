@@ -10,6 +10,10 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Task, TaskCreate, TaskUpdate
 
 This skill helps you implement features from specification documents while maintaining a persistent connection to the source requirements. It solves the problem of "drift" where Claude loses track of the original document as work progresses and context compacts.
 
+**Announce at start:** When this skill activates, announce what you're doing:
+- Explicit invocation: `"I'm using the implement skill to [plan/implement/verify/continue] from [spec name]."`
+- Implicit activation: `"It looks like you're working with an implementation tracker. I'm using the implement skill to help with that."`
+
 **Detailed workflows are in reference files — load them on demand per phase, not all at once.**
 
 ## Commands
@@ -257,6 +261,54 @@ This skill may be activated when the user's message mentions tracker files, impl
 ## Arguments Handling
 
 The `$ARGUMENTS` variable contains what the user passed after `/implement`.
+
+### Routing Flowchart
+
+```dot
+digraph routing {
+    rankdir=TB;
+    node [shape=diamond];
+
+    "Arguments?" [label="What are the\narguments?"];
+    "Trackers exist?" [label="Existing\ntrackers?"];
+    "How many?" [label="How many\ntrackers?"];
+    "Specs found?" [label="Spec files\nfound?"];
+
+    node [shape=box];
+
+    "Phase 1: Planning" [label="Phase 1: Planning\nRead phase-1-planning.md"];
+    "Phase 3: Verify" [label="Phase 3: Verify\nRead phase-3-verification.md"];
+    "Phase 4: Status" [label="Phase 4: Status\n(inline above)"];
+    "Phase 5: Continue" [label="Phase 5: Continue\nRead phase-5-continue.md"];
+    "List trackers" [label="List all trackers\nwith status"];
+    "Handle config" [label="Handle preferences\n(see Config Arguments)"];
+    "Offer continue" [label="Offer to continue\nimplementation"];
+    "Show list + ask" [label="Show list,\nask which one"];
+    "Present specs" [label="Present candidates,\nask which to implement"];
+    "Ask for path" [label="Ask user for\nspec path"];
+
+    "Arguments?" -> "Phase 1: Planning" [label="file path\n(has / or .md)"];
+    "Arguments?" -> "Phase 3: Verify" [label="verify [name]"];
+    "Arguments?" -> "Phase 4: Status" [label="status [name]"];
+    "Arguments?" -> "Phase 5: Continue" [label="continue [name]"];
+    "Arguments?" -> "List trackers" [label="list"];
+    "Arguments?" -> "Handle config" [label="config [...]"];
+    "Arguments?" -> "Trackers exist?" [label="empty"];
+
+    "Trackers exist?" -> "How many?" [label="yes"];
+    "Trackers exist?" -> "Specs found?" [label="no"];
+
+    "How many?" -> "Offer continue" [label="exactly 1"];
+    "How many?" -> "Show list + ask" [label="multiple"];
+
+    "Specs found?" -> "Present specs" [label="yes"];
+    "Specs found?" -> "Ask for path" [label="no"];
+
+    "Offer continue" -> "Phase 5: Continue";
+    "Present specs" -> "Phase 1: Planning";
+    "Ask for path" -> "Phase 1: Planning";
+}
+```
 
 Parse it as follows:
 - If it's a file path (contains `/` or ends in `.md`): Start Phase 1 — read `references/phase-1-planning.md`
