@@ -17,3 +17,13 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+
+specs/**/reviews/*
+specs/**/summary/fragments/
+specs/**/summary/pptx/
+specs/**/pdf/*.md
+specs/**/summary/*.json
+specs/**/.*
+
+*.done
+.image-cache
