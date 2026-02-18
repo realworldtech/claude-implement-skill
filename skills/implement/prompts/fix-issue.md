@@ -26,8 +26,32 @@ Task(
   Read the current code and the spec carefully before making changes.
   Don't assume the problem description is complete — verify it yourself.
 
-  Summarize what you changed and confirm the fix addresses the spec requirement."
+  ## Output — Write summary to disk
+
+  Write your summary to: <impl-dir>/.impl-work/<spec-name>/summary.json
+
+  {
+    \"task\": \"fix §X.Y — [brief problem description]\",
+    \"status\": \"complete\",
+    \"files_changed\": [\"path/to/file.py\"],
+    \"fix_description\": \"What was changed and why\",
+    \"concerns\": []
+  }
+
+  After writing the JSON, write a completion marker:
+  <impl-dir>/.impl-work/<spec-name>/summary.done (contents: just \"done\").
+  The .done marker MUST be the last file you write.
+
+  Then respond with just: Done."
 )
+```
+
+## Pre-flight
+
+Before dispatching, clear any previous markers:
+
+```bash
+rm -f <impl-dir>/.impl-work/<spec-name>/summary.done
 ```
 
 ## When to Use
@@ -39,6 +63,8 @@ Task(
 
 ## After the Fix
 
-1. Re-run tests to confirm the fix works
-2. Check for regressions in existing tests
-3. Update the tracker with new implementation notes
+1. Read `<impl-dir>/.impl-work/<spec-name>/summary.json` for the fix summary
+2. Re-run tests to confirm the fix works
+3. Check for regressions in existing tests
+4. Update the tracker with new implementation notes
+5. Do NOT re-analyse the agent's conversational output

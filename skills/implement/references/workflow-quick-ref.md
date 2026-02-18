@@ -46,18 +46,21 @@ Before starting any task:
 
 ## Post-Task Checklist
 
-After completing any task:
+After a sub-agent completes any task — **do not re-review the code manually**. Use objective checks:
 
+- [ ] **Note the summary** from the sub-agent report — do NOT deeply re-analyse the output
 - [ ] **Check DIGEST** (if sonnet sub-agent): extract `=== DIGEST ===`, check against complexity categories, dispatch opus review if matched
 - [ ] **Run tests** for the changed code (pytest, npm test, etc.)
 - [ ] **Fix any test failures** before marking complete
 - [ ] **Run linting/type checks** if configured (mypy, flake8, eslint, tsc)
-- [ ] **Spec compliance check** (optional): run `prompts/spec-compliance-check.md` for non-trivial tasks
+- [ ] **Spec compliance check** (recommended for non-trivial tasks): dispatch `prompts/spec-compliance-check.md` — replaces manual review
 - [ ] **Commit** (if in a git repo): atomic commit for this task's changes — makes rollback easier
 - [ ] Update tracker: change status, add file:line reference
 - [ ] Add Implementation Log entry
 - [ ] Note any gaps or ambiguities discovered
 - [ ] Update task status with TaskUpdate
+
+**Only dig deeper if**: tests fail, sub-agent flagged concerns, DIGEST triggered escalation, or compliance check found issues.
 
 **Never mark a task complete if tests are failing.**
 
@@ -176,38 +179,31 @@ When you find a gap:
 
 **When in doubt, use `opus`**. If the task involves any logic decisions, conditional behavior, or algorithmic work, use `opus`.
 
-### Sub-Agent Prompt Structure
+### Sub-Agent Output Pattern
 
-```
-Task(
-  subagent_type: "general-purpose",
-  model: "sonnet",
-  prompt: "Implement [requirement] per §X.Y.
+All sub-agents write structured output to disk and respond with just "Done."
 
-  ## Spec Requirement (§X.Y)
-  [Exact quoted text from spec]
+**Implementation/test/fix agents** write to: `<impl-dir>/.impl-work/<spec-name>/summary.json`
+**Compliance check agents** write to: `<impl-dir>/.impl-work/<spec-name>/compliance.json`
+**Verification agents** write to: `<impl-dir>/.impl-verification/<spec-name>/fragments/<id>.json`
+**Fix-verification agents** write to: `<impl-dir>/.impl-work/<spec-name>/fix-summary.json`
 
-  ## Files to Modify
-  - path/to/file.py
+All use `.done` markers to signal completion.
 
-  ## Expected Changes
-  - [What should be implemented]
-
-  Summarize changes made and any issues encountered."
-)
-```
+See the prompt templates in `prompts/` for the exact JSON formats.
 
 ### After Sub-Agent Returns
 
-1. Sub-agent output comes via `TaskOutput` — use that directly
-2. **Do NOT read or grep agent output files** — they are raw JSON transcripts, not usable text
+1. **Read the structured summary from disk** — NOT the agent's conversational output
+2. Check for `concerns` or non-`complete` status in the summary
 3. **Run tests** for affected code
 4. Fix any test failures (use Opus for complex fixes)
 5. Run linting/type checks
 6. Only then update tracker as complete
 
 ```
-# Example test run after implementation
+# Example: read summary then run tests
+Read("<impl-dir>/.impl-work/<spec-name>/summary.json")
 Bash("pytest tests/test_affected_module.py -v")
 ```
 

@@ -31,9 +31,41 @@ Task(
   - Each test should verify a specific spec requirement or behavior
   - Do not write trivial or boilerplate tests
   - Include edge cases mentioned in the spec
-  - Use descriptive test names that reference the requirement"
+  - Use descriptive test names that reference the requirement
+
+  ## Output — Write summary to disk
+
+  Write your summary to: <impl-dir>/.impl-work/<spec-name>/summary.json
+
+  {
+    \"task\": \"tests for §X.Y\",
+    \"status\": \"complete\",
+    \"files_changed\": [\"tests/test_file.py\"],
+    \"tests_written\": [\"test name — what it verifies\"],
+    \"concerns\": []
+  }
+
+  After writing the JSON, write a completion marker:
+  <impl-dir>/.impl-work/<spec-name>/summary.done (contents: just \"done\").
+  The .done marker MUST be the last file you write.
+
+  Then respond with just: Done."
 )
 ```
+
+## Pre-flight
+
+Before dispatching, clear any previous markers:
+
+```bash
+rm -f <impl-dir>/.impl-work/<spec-name>/summary.done
+```
+
+## After Agent Completes
+
+1. Read `<impl-dir>/.impl-work/<spec-name>/summary.json` for the test summary
+2. **Run the full test suite** to confirm both new and existing tests pass
+3. Do NOT re-analyse the agent's conversational output
 
 ## What to Test
 

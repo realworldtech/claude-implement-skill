@@ -28,7 +28,7 @@ When a spec has breakout section files (e.g., produced by `/spec`), build a stru
 | 5k–20k tokens | `sonnet` | 1 section per agent |
 | > 20k tokens | `opus` | 1 section per agent |
 
-3. **Digest-based complexity escalation**: Sonnet agents produce a DIGEST (5-10 lines) at the end of their response summarizing key entities, patterns, and complexity encountered. The main conversation checks the DIGEST against the complexity category table:
+3. **Digest-based complexity escalation**: Sonnet agents include a `digest` field in their structured summary JSON (written to `.impl-work/<spec-name>/summary.json`). The main conversation reads the `digest` field and checks it against the complexity category table:
 
    | Category | DIGEST signals | Why opus review needed |
    |----------|---------------|----------------------|
@@ -75,9 +75,8 @@ When delegating implementation work:
    - Fixing issues: `prompts/fix-issue.md`
 
 3. **After sub-agent completes** (main conversation):
-   - Sub-agent output comes via `TaskOutput` — use that directly
-   - **Do NOT read or grep agent output files** — they are raw JSON transcripts, not usable text
-   - Review the changes made
-   - If issues found, fix with `Task` using `model: "opus"` (see `prompts/fix-issue.md`)
-   - Update the tracker with implementation notes
-   - Update task status
+   - **Read the structured summary from disk** (`<impl-dir>/.impl-work/<spec-name>/summary.json`) — NOT the agent's conversational output
+   - Check `concerns` and `status` fields — only dig deeper if something flags
+   - Check the `digest` field against the complexity category table (sonnet agents only)
+   - Run tests, then update the tracker
+   - If issues found, fix with `prompts/fix-issue.md` (Opus)

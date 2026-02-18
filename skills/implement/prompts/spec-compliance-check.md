@@ -18,7 +18,7 @@ Task(
 
   ## What the Implementer Claims
 
-  [Summary from the implementation sub-agent's report]
+  [Summary from the implementation summary.json — paste the relevant fields]
 
   ## CRITICAL: Verify Independently
 
@@ -43,16 +43,53 @@ Task(
   - Does the implementation match the spec's intent, not just its letter?
 
   ## Files to Check
-  - [list implementation files from the sub-agent's report]
+  - [list implementation files from the summary.json]
 
-  ## Report
+  ## Output — Write verdict to disk
 
-  - **PASS** — implementation matches spec for this task
-  - **ISSUES** — list specifically what's missing, extra, or wrong, with file:line references
+  Write your verdict to: <impl-dir>/.impl-work/<spec-name>/compliance.json
 
-  Keep it brief. This is a spot-check, not a full audit."
+  {
+    \"task\": \"§X.Y compliance check\",
+    \"verdict\": \"pass\",
+    \"issues\": []
+  }
+
+  Or if issues found:
+
+  {
+    \"task\": \"§X.Y compliance check\",
+    \"verdict\": \"issues\",
+    \"issues\": [
+      {\"type\": \"missing\", \"description\": \"...\", \"file\": \"...\", \"line\": \"...\"},
+      {\"type\": \"extra\", \"description\": \"...\", \"file\": \"...\", \"line\": \"...\"},
+      {\"type\": \"misunderstanding\", \"description\": \"...\", \"file\": \"...\", \"line\": \"...\"}
+    ]
+  }
+
+  After writing the JSON, write a completion marker:
+  <impl-dir>/.impl-work/<spec-name>/compliance.done (contents: just \"done\").
+  The .done marker MUST be the last file you write.
+
+  Then respond with just: Done."
 )
 ```
+
+## Pre-flight
+
+Before dispatching, clear any previous markers:
+
+```bash
+rm -f <impl-dir>/.impl-work/<spec-name>/compliance.done
+```
+
+## After Agent Completes
+
+1. Read `<impl-dir>/.impl-work/<spec-name>/compliance.json` for the verdict
+2. If `verdict` is `pass` — proceed to tracker update
+3. If `verdict` is `issues` — fix them (use `prompts/fix-issue.md` for complex fixes), re-run tests
+4. You do NOT need to re-run the compliance check after fixes — the fix agent + tests are sufficient
+5. Do NOT re-analyse the agent's conversational output
 
 ## When to Use
 
@@ -69,9 +106,3 @@ And before:
 - Trivially simple tasks (single field addition, config change)
 - Tasks where the implementation agent used `opus` and the self-review was thorough
 - When you're about to run full Phase 3 verification anyway
-
-## If Issues Are Found
-
-1. Fix the issues (use `prompts/fix-issue.md` for complex fixes)
-2. Re-run tests
-3. You do NOT need to re-run the compliance check — the fix agent + tests are sufficient

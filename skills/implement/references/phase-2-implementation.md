@@ -28,41 +28,47 @@ This prevents drift by ensuring you're always working from the source of truth.
 
 ### Step 2: Delegate to Sub-Agent
 
+**Pre-flight**: Clear previous markers before dispatching:
+
+```bash
+mkdir -p <impl-dir>/.impl-work/<spec-name>/ && rm -f <impl-dir>/.impl-work/<spec-name>/summary.done
+```
+
 Spawn a sub-agent for the implementation work. The prompt style depends on spec type:
 
 - **Single-file specs**: Use the prompt template at `prompts/implement-single-file.md`
 - **Multi-file specs**: Use the prompt template at `prompts/implement-multi-file.md`
 
-### Step 3: Review and Verify (Main Conversation)
+### Step 3: Validate (Main Conversation)
 
-After the implementation sub-agent completes:
+After the sub-agent completes (TaskOutput returns "Done."), **read the structured summary from disk** — do NOT re-analyse the agent's conversational output:
 
-1. Review the changes made by the sub-agent
-2. Verify they match the spec requirements
-3. **Run existing tests** to check for regressions:
-   - Run the full test suite or at minimum the relevant test files
-   - If tests fail, fix the issues before proceeding
-4. If issues found:
-   - For minor fixes: fix directly
-   - For complex issues: use `prompts/fix-issue.md` to spawn an Opus fix agent
-   - **Re-run tests after any fix**
-5. **Check DIGEST for complexity escalation** (multi-file/sonnet agents only):
-   - Extract the `=== DIGEST ===` section from the sub-agent's response
-   - Check DIGEST signals against the complexity category table in `references/sub-agent-strategy.md`
+1. **Read the summary**: `<impl-dir>/.impl-work/<spec-name>/summary.json`
+   - Check `concerns` — if non-empty, investigate
+   - Check `status` — if not `complete`, investigate
+2. **Check DIGEST for complexity escalation** (multi-file/sonnet agents only):
+   - Read the `digest` field from `summary.json`
+   - Check signals against the complexity category table in `references/sub-agent-strategy.md`
    - If any category matches: dispatch opus to review the sonnet's code changes
-   - Run tests again after any opus-driven changes
+3. **Run tests** to check for regressions:
+   - Run the full test suite or at minimum the relevant test files
+   - If tests fail: use `prompts/fix-issue.md` to spawn an Opus fix agent, then re-run tests
+4. **Spec compliance check** (optional but recommended for non-trivial tasks):
+   - Use `prompts/spec-compliance-check.md` — feed it the spec text and the `files_changed` from `summary.json`
+   - Read the verdict from `<impl-dir>/.impl-work/<spec-name>/compliance.json`
+   - This replaces manual review — an independent agent with fresh context is more reliable
 
-### Step 3a: Spec Compliance Check (Optional)
-
-After tests pass, optionally run a lightweight spec compliance check using the prompt template at `prompts/spec-compliance-check.md`. This catches implementation drift early rather than waiting for Phase 3.
-
-**Recommended for**: tasks involving multiple requirements, complex logic, or sonnet-implemented work. **Skip for**: trivially simple tasks or when Phase 3 verification is imminent.
+**Only dig deeper if**: tests fail, `concerns` is non-empty, DIGEST triggered escalation, or the compliance check found issues.
 
 ### Step 4: Write Tests for New Functionality
 
-After the implementation is reviewed and existing tests pass, delegate test writing using the prompt template at `prompts/write-tests.md`.
+Clear previous markers, then delegate test writing using the prompt template at `prompts/write-tests.md`:
 
-After the test sub-agent completes, **run the full test suite** to confirm both new and existing tests pass.
+```bash
+rm -f <impl-dir>/.impl-work/<spec-name>/summary.done
+```
+
+After the test sub-agent completes, read `summary.json` for the test list, then **run the full test suite** to confirm both new and existing tests pass.
 
 ### Step 5: Commit (If in a Git Repo)
 

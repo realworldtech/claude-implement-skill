@@ -147,10 +147,12 @@ This produces:
 Use the prompt template at `prompts/fix-verification-gap.md` to fix gaps. **Always use Opus.**
 
 After each fix:
-1. Re-verify that specific requirement (single sub-agent)
+1. Read the fix summary from `<impl-dir>/.impl-work/<spec-name>/fix-summary.json` — do NOT re-analyse conversational output
 2. Run tests to confirm fix works
-3. Update the tracker
-4. Repeat until all gaps are resolved
+3. Re-verify that specific requirement (single sub-agent, **background**, same pattern as Step 3 — writes JSON fragment + `.done` marker)
+4. Wait for `.done`, then read the updated fragment to confirm the fix resolved the V-item
+5. Update the tracker
+6. Repeat until all gaps are resolved
 
 ## Re-Verification Mode
 

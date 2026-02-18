@@ -55,24 +55,45 @@ Task(
 
   If you find issues during self-review, fix them before reporting.
 
-  ## Report Format
+  ## Output — Write summary to disk
 
-  Summarize: what you implemented, files changed, any issues or concerns,
-  and self-review findings (if any).
+  Write your summary to: <impl-dir>/.impl-work/<spec-name>/summary.json
 
-  At the end of your response, include a DIGEST section:
-  === DIGEST ===
-  - Entities: <key classes, models, services touched>
-  - Patterns: <design patterns used or encountered>
-  - Complexity: <any algorithmic, state machine, auth, or business rule complexity>
-  === END DIGEST ==="
+  {
+    \"task\": \"§X.Y — [requirement]\",
+    \"status\": \"complete\",
+    \"files_changed\": [\"path/to/file.py\"],
+    \"concerns\": [],
+    \"self_review\": \"Brief note on what self-review found, or empty\",
+    \"digest\": {
+      \"entities\": \"key classes, models, services touched\",
+      \"patterns\": \"design patterns used or encountered\",
+      \"complexity\": \"any algorithmic, state machine, auth, or business rule complexity\"
+    }
+  }
+
+  After writing the JSON, write a completion marker:
+  <impl-dir>/.impl-work/<spec-name>/summary.done (contents: just \"done\").
+  The .done marker MUST be the last file you write.
+
+  Then respond with just: Done."
 )
 ```
 
-## After Implementation
+## Pre-flight
 
-1. **Check DIGEST** for complexity escalation (see `references/sub-agent-strategy.md`)
-2. Run the full test suite — new tests should now pass, existing tests should still pass
-3. If new tests still fail: fix the implementation (not the tests), then re-run
-4. If a test seems genuinely wrong: **flag it for user review** rather than changing it
-5. If existing tests break: fix the regression in the implementation
+Before dispatching, clear any previous markers:
+
+```bash
+mkdir -p <impl-dir>/.impl-work/<spec-name>/ && rm -f <impl-dir>/.impl-work/<spec-name>/summary.done
+```
+
+## After Agent Completes
+
+1. Wait for `.done` marker (or note TaskOutput returns "Done.")
+2. Read `<impl-dir>/.impl-work/<spec-name>/summary.json` for the structured summary
+3. Check the `digest` field for complexity escalation (see `references/sub-agent-strategy.md`)
+4. Run the full test suite — new tests should now pass, existing tests should still pass
+5. If new tests still fail: fix the implementation (not the tests), then re-run
+6. If a test seems genuinely wrong: **flag it for user review** rather than changing it
+7. Do NOT re-analyse the agent's conversational output

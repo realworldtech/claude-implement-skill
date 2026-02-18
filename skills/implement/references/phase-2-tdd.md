@@ -29,7 +29,15 @@ Same as the standard workflow:
 
 ### Step 2: Write Tests First
 
+**Pre-flight**: Clear previous markers:
+
+```bash
+mkdir -p <impl-dir>/.impl-work/<spec-name>/ && rm -f <impl-dir>/.impl-work/<spec-name>/summary.done
+```
+
 Delegate test writing using the prompt template at `prompts/tdd-write-tests.md`. The sub-agent works **purely from the spec** — it should NOT see any implementation code.
+
+After the agent completes, read `<impl-dir>/.impl-work/<spec-name>/summary.json` for the test summary. Do NOT re-analyse conversational output.
 
 ### Step 3: Run Tests — Confirm Failures
 
@@ -44,33 +52,36 @@ Run the test suite. The new tests **should fail** (since implementation doesn't 
 
 ### Step 4: Implement to Pass Tests
 
-Delegate implementation using the prompt template at `prompts/tdd-implement.md`. Key difference from standard workflow: the implementation agent receives the test file path as acceptance criteria.
+Clear previous markers, then delegate implementation using the prompt template at `prompts/tdd-implement.md`:
 
-### Step 5a: Check DIGEST for Complexity Escalation
+```bash
+rm -f <impl-dir>/.impl-work/<spec-name>/summary.done
+```
 
-After the implementation sub-agent completes and before running tests:
+Key difference from standard workflow: the implementation agent receives the test file path as acceptance criteria.
 
-1. Extract the `=== DIGEST ===` section from the sub-agent's response
-2. Check DIGEST signals against the complexity category table in `references/sub-agent-strategy.md`
-3. If any category matches: dispatch opus to review the sonnet's code changes
-4. Run tests after any opus-driven changes
+### Step 5: Validate (Main Conversation)
 
-This step only applies when the implementation sub-agent was a sonnet. Skip for opus agents.
+After the implementation sub-agent completes (TaskOutput returns "Done."), **read the structured summary from disk** — do NOT re-analyse conversational output:
 
-### Step 5: Run Tests — Confirm Passes and Spec Compliance Check
+1. **Read the summary**: `<impl-dir>/.impl-work/<spec-name>/summary.json`
+   - Check `concerns` — if non-empty, investigate
+   - Check `status` — if not `complete`, investigate
+2. **Check DIGEST for complexity escalation** (sonnet agents only):
+   - Read the `digest` field from `summary.json`
+   - Check signals against the complexity category table in `references/sub-agent-strategy.md`
+   - If any category matches: dispatch opus to review the sonnet's code changes
+3. **Run the full test suite**:
+   - **New tests should now pass** — confirms implementation meets the spec
+   - **Existing tests should still pass** — no regressions
+   - If new tests still fail: fix the implementation (not the tests), then re-run
+   - If a test seems genuinely wrong: **flag it for user review** rather than changing the test
+   - If existing tests break: fix the regression in the implementation
+4. **Spec compliance check** (optional but recommended for non-trivial tasks):
+   - Use `prompts/spec-compliance-check.md` — feed it the spec text and `files_changed` from `summary.json`
+   - Read the verdict from `<impl-dir>/.impl-work/<spec-name>/compliance.json`
 
-Run the full test suite:
-- **New tests should now pass** — confirms implementation meets the spec
-- **Existing tests should still pass** — no regressions
-- If new tests still fail: fix the implementation (not the tests), then re-run
-- If a test seems genuinely wrong: **flag it for user review** rather than changing the test
-- If existing tests break: fix the regression in the implementation
-
-### Step 5b: Spec Compliance Check (Optional)
-
-After tests pass, optionally run a lightweight spec compliance check using the prompt template at `prompts/spec-compliance-check.md`. This catches implementation drift early rather than waiting for Phase 3.
-
-**Recommended for**: tasks involving multiple requirements, complex logic, or sonnet-implemented work. **Skip for**: trivially simple tasks or when Phase 3 verification is imminent.
+**Only dig deeper if**: tests fail, `concerns` is non-empty, DIGEST triggered escalation, or the compliance check found issues.
 
 ### Step 6: Commit (If in a Git Repo)
 

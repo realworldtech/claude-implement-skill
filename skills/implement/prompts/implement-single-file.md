@@ -50,12 +50,39 @@ Task(
 
   If you find issues during self-review, fix them before reporting.
 
-  ## Report Format
+  ## Output — Write summary to disk
 
-  Summarize: what you implemented, files changed, any issues or concerns,
-  and self-review findings (if any)."
+  Write your summary to: <impl-dir>/.impl-work/<spec-name>/summary.json
+
+  {
+    \"task\": \"§X.Y — [requirement]\",
+    \"status\": \"complete\",
+    \"files_changed\": [\"path/to/file.py\"],
+    \"concerns\": [],
+    \"self_review\": \"Brief note on what self-review found, or empty\"
+  }
+
+  After writing the JSON, write a completion marker:
+  <impl-dir>/.impl-work/<spec-name>/summary.done (contents: just \"done\").
+  The .done marker MUST be the last file you write.
+
+  Then respond with just: Done."
 )
 ```
+
+## Pre-flight
+
+Before dispatching, clear any previous markers:
+
+```bash
+mkdir -p <impl-dir>/.impl-work/<spec-name>/ && rm -f <impl-dir>/.impl-work/<spec-name>/summary.done
+```
+
+## After Agent Completes
+
+1. Wait for `.done` marker (or note TaskOutput returns "Done.")
+2. Read `<impl-dir>/.impl-work/<spec-name>/summary.json` for the structured summary
+3. Do NOT re-analyse the agent's conversational output
 
 ## Placeholders
 
@@ -67,3 +94,5 @@ Task(
 | `path/to/file.py` | Actual file paths to modify |
 | `[Any relevant existing code patterns...]` | Existing patterns the agent should follow |
 | `[Describe what the implementation should do]` | Expected behavior after implementation |
+| `<impl-dir>` | Implementation directory (worktree or cwd) |
+| `<spec-name>` | Spec basename for scoping |

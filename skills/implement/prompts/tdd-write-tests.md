@@ -36,21 +36,47 @@ Task(
   - Do NOT stub/mock the thing being tested — test real behavior
   - Use descriptive test names that reference the requirement
 
-  At the end of your response, include a DIGEST section:
-  === DIGEST ===
-  - Entities: <key classes, models, services touched>
-  - Patterns: <design patterns used or encountered>
-  - Complexity: <any algorithmic, state machine, auth, or business rule complexity>
-  === END DIGEST ==="
+  ## Output — Write summary to disk
+
+  Write your summary to: <impl-dir>/.impl-work/<spec-name>/summary.json
+
+  {
+    \"task\": \"TDD tests for §X.Y\",
+    \"status\": \"complete\",
+    \"files_changed\": [\"tests/test_file.py\"],
+    \"tests_written\": [\"test name — what spec requirement it verifies\"],
+    \"concerns\": [],
+    \"digest\": {
+      \"entities\": \"key classes, models, services referenced\",
+      \"patterns\": \"design patterns used or encountered\",
+      \"complexity\": \"any algorithmic, state machine, auth, or business rule complexity\"
+    }
+  }
+
+  After writing the JSON, write a completion marker:
+  <impl-dir>/.impl-work/<spec-name>/summary.done (contents: just \"done\").
+  The .done marker MUST be the last file you write.
+
+  Then respond with just: Done."
 )
+```
+
+## Pre-flight
+
+Before dispatching, clear any previous markers:
+
+```bash
+rm -f <impl-dir>/.impl-work/<spec-name>/summary.done
 ```
 
 ## After Tests are Written
 
-Run the test suite. The new tests **should fail** (since implementation doesn't exist yet). This validates:
-- Tests are checking something real (not trivially passing)
-- Tests are syntactically valid and runnable
-- Test infrastructure works
+1. Read `<impl-dir>/.impl-work/<spec-name>/summary.json` for the test summary
+2. Run the test suite. The new tests **should fail** (since implementation doesn't exist yet). This validates:
+   - Tests are checking something real (not trivially passing)
+   - Tests are syntactically valid and runnable
+   - Test infrastructure works
+3. Do NOT re-analyse the agent's conversational output
 
 **If tests pass unexpectedly**: Investigate — either the feature already exists, or tests are too loose.
 
