@@ -179,6 +179,21 @@ When the user provides a spec path, follow these steps:
 
 ### Step 1: Read and Parse the Specification
 
+**Worktree detection**: After reading the spec/brief document, determine whether it indicates that implementation work should happen in a specific directory — typically a git worktree. Look for any mention of:
+- A worktree path or working directory for implementation
+- A branch the implementation should be on
+- A project root distinct from the implementation location
+
+This is intentionally generic — do not look for specific section names or field formats. Read the document and extract the intent. The brief may come from any source (the spec-pipeline, a hand-written document, etc.).
+
+**Validation** (if a worktree path was identified):
+1. Verify the path exists on disk
+2. Confirm it appears in `git worktree list` output (run from the project root or the worktree itself)
+3. If a branch was specified, confirm the worktree is on that branch via `git -C <worktree-path> branch --show-current`
+4. If validation fails, warn the user and ask whether to proceed working in the current directory or abort
+
+**Effect**: If a valid worktree is detected, it becomes the **implementation directory** — all subsequent operations (tracker creation, file edits, test runs, verification) happen there instead of the current working directory. If no worktree is detected, the current working directory is used as before.
+
 **STRUCT awareness check**: Before parsing the spec, look for `.spec-tracker-*.md` files in the spec's directory. If found, check for a `## Pending Structural Changes` section. If pending structural issues exist, warn the user:
 
 > The spec has pending structural changes flagged by the `/spec` skill. These may affect implementation planning. Would you like to proceed anyway, or wait for the spec author to resolve them?
