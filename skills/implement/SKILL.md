@@ -1289,11 +1289,13 @@ If you suspect compaction has occurred:
 
 2. **Read the tracker**: The tracker contains recovery instructions and current state
 
-3. **Read the spec**: The tracker's `**Specification**:` line points to the source document
+3. **Check for worktree**: If the tracker's `**Worktree**` field is not `none`, validate the worktree still exists and set it as the implementation directory. All subsequent file operations should target the worktree path.
 
-4. **Check TaskList**: See what tasks exist and their status
+4. **Read the spec**: The tracker's `**Specification**:` line points to the source document
 
-5. **Resume work**: Use the tracker's Requirements Matrix to understand what's done and what's pending
+5. **Check TaskList**: See what tasks exist and their status
+
+6. **Resume work**: Use the tracker's Requirements Matrix to understand what's done and what's pending
 
 ### Self-Recovery Protocol
 
