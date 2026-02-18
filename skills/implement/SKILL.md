@@ -228,7 +228,7 @@ Record the spec type in the tracker (`**Spec Type**: single-file` or `**Spec Typ
 
 ### Step 2: Create the Implementation Tracker
 
-Create a tracker file **named after the spec** in the current working directory. This allows multiple implementations to coexist.
+Create a tracker file **named after the spec** in the **implementation directory** (the worktree if one was detected in Step 1, otherwise the current working directory). This allows multiple implementations to coexist.
 
 **Naming convention**: `.impl-tracker-<spec-basename>.md`
 
@@ -250,6 +250,8 @@ Use this format:
 **TDD Mode**: <set in Step 5 after plan approval — on or off>
 **Spec Type**: <single-file or multi-file — set in Step 1 based on spec structure>
 **Spec Baseline**: <date — when structural index was captured>
+**Worktree**: <absolute path to worktree, or "none" if working in current directory>
+**Branch**: <branch name, or "none" if not specified>
 
 ## Structural Index
 
