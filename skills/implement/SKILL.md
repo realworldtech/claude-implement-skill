@@ -751,10 +751,10 @@ This catches field name typos, import errors, type mismatches, and other mechani
 ### Finding the Right Tracker
 
 1. If spec-name provided: Look for `.impl-tracker-<spec-name>.md`
-2. If not provided: List all `.impl-tracker-*.md` files in current directory
+2. If not provided: List all `.impl-tracker-*.md` files in the current directory and any known worktree paths
    - If exactly one: use it
    - If multiple: show list and ask which one
-   - If none: also search any worktree paths found in other trackers (handles invocation from the main repo root when the tracker lives in a worktree). If still none, inform user no active implementations found.
+   - If none: inform user no active implementations found
 
 ### Step 1: Build the Verification Plan (Main Conversation)
 
@@ -1168,10 +1168,10 @@ When the user requests status:
 ### Finding the Right Tracker
 
 1. If spec-name provided: Look for `.impl-tracker-<spec-name>.md`
-2. If not provided: List all `.impl-tracker-*.md` files in current directory
+2. If not provided: List all `.impl-tracker-*.md` files in the current directory and any known worktree paths
    - If exactly one: use it
    - If multiple: show list and ask which one
-   - If none: also search any worktree paths found in other trackers. If still none, inform user no active implementations found.
+   - If none: inform user no active implementations found
 
 ### Show Status
 
@@ -1192,10 +1192,10 @@ When resuming work:
 ### Finding the Right Tracker
 
 1. If spec-name provided: Look for `.impl-tracker-<spec-name>.md`
-2. If not provided: List all `.impl-tracker-*.md` files in current directory
+2. If not provided: List all `.impl-tracker-*.md` files in the current directory and any known worktree paths
    - If exactly one: use it
    - If multiple: show list and ask which one
-   - If none: also search any worktree paths found in other trackers. If still none, inform user no active implementations found.
+   - If none: inform user no active implementations found
 
 ### Resume Work
 
