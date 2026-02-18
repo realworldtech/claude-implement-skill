@@ -235,13 +235,14 @@ When starting or resuming work:
 1. **Check for compaction**: If you feel uncertain about the implementation context, you may have experienced compaction
 2. Run `/implement list` to see active implementations
 3. Read the appropriate `.impl-tracker-<spec-name>.md`
-4. **Spec freshness check**: Compare current spec files against the stored Structural Index (multi-file) or baseline date (single-file). Look for new/removed files, >20% size changes, or new sub-split patterns. If changes detected, present user with options: re-scan affected sections, proceed as-is, or full re-plan.
-5. **STRUCT check**: Look for `.spec-tracker-*.md` with `## Pending Structural Changes` — warn user if found
-6. **Read the Recovery Instructions** section in the tracker if you're unsure of the workflow
-7. Run `TaskList` to see pending tasks
-8. Pick the next task
-9. Read the spec sections for that task
-10. Delegate to sub-agent for implementation
+4. **Worktree validation**: If the tracker's `**Worktree**` field is not `none`, verify the worktree path still exists and is on the expected branch. Set it as the implementation directory for all subsequent operations.
+5. **Spec freshness check**: Compare current spec files against the stored Structural Index (multi-file) or baseline date (single-file). Look for new/removed files, >20% size changes, or new sub-split patterns. If changes detected, present user with options: re-scan affected sections, proceed as-is, or full re-plan.
+6. **STRUCT check**: Look for `.spec-tracker-*.md` with `## Pending Structural Changes` — warn user if found
+7. **Read the Recovery Instructions** section in the tracker if you're unsure of the workflow
+8. Run `TaskList` to see pending tasks
+9. Pick the next task
+10. Read the spec sections for that task
+11. Delegate to sub-agent for implementation
 
 ### Recognizing Compaction
 

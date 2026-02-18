@@ -26,6 +26,8 @@ This allows you to work on multiple specs simultaneously without conflicts.
 **TDD Mode**: on | off
 **Spec Type**: single-file | multi-file
 **Spec Baseline**: YYYY-MM-DD
+**Worktree**: <absolute path to worktree, or "none" if working in current directory>
+**Branch**: <branch name, or "none" if not specified>
 
 ## Recovery Instructions
 
@@ -33,19 +35,20 @@ If you're reading this after context compaction or in a new session, follow thes
 
 1. **You are implementing a specification**. The spec path is shown above.
 2. **Read this entire tracker** to understand current state and progress.
-3. **Check the Spec Type field above**:
+3. **Check the Worktree field above**: If not `none`, validate the worktree path still exists on disk and is a valid git worktree. Set it as the implementation directory — all file operations should target that path. If the worktree no longer exists, warn the user.
+4. **Check the Spec Type field above**:
    - **single-file**: Read the full spec file to understand requirements.
    - **multi-file**: Read the master spec's table of contents only. Run `wc -c` on section files to rebuild the structural index (`estimated_tokens ≈ bytes / 4`). Compare against the stored Structural Index — look for new files, removed files, >20% size changes, or new sub-split patterns (e.g., `02a-`, `02b-`). If changes are detected, flag them before proceeding (see Spec Evolution Handling in SKILL.md). Do NOT read all section files into main context — pass file paths to sub-agents and let them read the files directly.
-4. **Check TaskList** for pending tasks.
-5. **Re-read relevant spec sections** (noted in Requirements Matrix) before any implementation work. For multi-file specs, read only the section headings and requirement identifiers — sub-agents will read full sections.
-6. **Delegate implementation to sub-agents**:
+5. **Check TaskList** for pending tasks.
+6. **Re-read relevant spec sections** (noted in Requirements Matrix) before any implementation work. For multi-file specs, read only the section headings and requirement identifiers — sub-agents will read full sections.
+7. **Delegate implementation to sub-agents**:
    - Straightforward tasks (adding fields, simple CRUD): use `model: "sonnet"` or `"haiku"`
    - Moderate/complex tasks (logic, algorithms): use `model: "opus"`
    - For multi-file specs, route by section size: <5k tokens → sonnet (group 2-3), 5k-20k → sonnet (1 each), >20k → opus (1 each)
    - **DIGEST-based escalation**: Sonnet agents produce a `=== DIGEST ===` at end of response. Check DIGEST signals against complexity categories (algorithms, state machines, permission/auth, complex business rules, cross-cutting). If matched → mandatory opus review of sonnet's changes.
-7. **Run tests after each sub-agent completes** - never skip this step.
-8. **Use Opus for verification** and fixing issues (`model: "opus"` - always).
-9. **Update this tracker** after each completed task.
+8. **Run tests after each sub-agent completes** - never skip this step.
+9. **Use Opus for verification** and fixing issues (`model: "opus"` - always).
+10. **Update this tracker** after each completed task.
 
 Key workflow: Tracker → Spec sections → Sub-agent → **Run tests** → Verify → Update tracker
 
@@ -218,6 +221,8 @@ For programmatic parsing, the tracker includes structured sections that can be e
 <!-- TDD_MODE: on|off -->
 <!-- SPEC_TYPE: single-file|multi-file -->
 <!-- SPEC_BASELINE: YYYY-MM-DD -->
+<!-- WORKTREE: /absolute/path/or/none -->
+<!-- BRANCH: branch-name-or-none -->
 <!-- LAST_SECTION: §4.7 -->
 <!-- COMPLETE_COUNT: 18 -->
 <!-- PARTIAL_COUNT: 4 -->
