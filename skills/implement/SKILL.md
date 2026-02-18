@@ -1200,7 +1200,13 @@ When resuming work:
 ### Resume Work
 
 1. Read the tracker file to understand current state
-2. **Spec freshness check** — detect whether the spec has changed since the last session:
+2. **Worktree validation** — if the tracker's `**Worktree**` field is not `none`:
+   - Verify the worktree path still exists on disk
+   - Verify it still appears in `git worktree list`
+   - If `**Branch**` is not `none`, verify the worktree is on the expected branch
+   - If validation fails, warn the user: the worktree may have been removed or the branch changed. Ask whether to re-create the worktree, work in the current directory instead, or abort.
+   - If validation passes, set the implementation directory to the worktree path
+3. **Spec freshness check** — detect whether the spec has changed since the last session:
    - **Multi-file specs**: Re-run `wc -c path/to/sections/*.md` and compare against the stored Structural Index in the tracker:
      - **New files**: Files present on disk but not in the index (including new sub-splits like `02d-`)
      - **Removed files**: Files in the index but no longer on disk
@@ -1210,11 +1216,11 @@ When resuming work:
    - **STRUCT check**: Look for `.spec-tracker-*.md` files (from the `/spec` skill) and check for a `## Pending Structural Changes` section — this indicates the spec author flagged structural issues that affect implementation
    - **When changes detected**: Present the user with 3 options (see **Spec Evolution Handling** below)
    - **When no changes detected**: Proceed silently
-3. **Check the `**TDD Mode**:` field** — use the TDD workflow (Phase 2 TDD Mode) or standard workflow accordingly. If the field is missing (tracker created before TDD mode existed), check preferences to determine the mode and update the tracker.
-4. Read the task list
-5. Identify the next pending task
-6. **Re-read the relevant spec sections** before continuing
-7. Resume implementation using the appropriate workflow
+4. **Check the `**TDD Mode**:` field** — use the TDD workflow (Phase 2 TDD Mode) or standard workflow accordingly. If the field is missing (tracker created before TDD mode existed), check preferences to determine the mode and update the tracker.
+5. Read the task list
+6. Identify the next pending task
+7. **Re-read the relevant spec sections** before continuing
+8. Resume implementation using the appropriate workflow
 
 ---
 
