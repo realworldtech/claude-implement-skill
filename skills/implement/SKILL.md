@@ -109,6 +109,59 @@ prompts/
 
 ---
 
+## Common Initialization
+
+Before entering any phase, run this initialization step. It applies to **every** command — `/implement <spec-path>`, `/implement continue`, `/implement verify`, `/implement status`, `/implement list`, `/implement config`, etc.
+
+### Resolve Tool Paths
+
+Sub-agents and bash code blocks need to find the skill repo's tools and venv Python. Resolve these once at session start and use them in all subsequent bash commands:
+
+```bash
+IMPL_REPO_DIR="$(cd "$(dirname "$(realpath ~/.claude/skills/implement/SKILL.md)")/../.." && pwd)"
+IMPL_TOOLS_DIR="$IMPL_REPO_DIR/tools"
+IMPL_PYTHON="$IMPL_REPO_DIR/.venv/bin/python"
+```
+
+Run this in a Bash tool call to confirm the paths resolve correctly (check that `$IMPL_PYTHON` exists). These three variables are used throughout all phases — always use `$IMPL_REPO_DIR`, `$IMPL_TOOLS_DIR`, and `$IMPL_PYTHON` in bash blocks, never redefine them with different names.
+
+### Ensure Sub-Agent Write Permissions
+
+Sub-agents need scoped Write/Edit permissions to create files in implementation work directories. Without these, sub-agents fail silently when dispatched in the background (interactive permission approvals are session-scoped and do not propagate to background agents).
+
+**Worktree detection**: Git worktrees (e.g., `.claude/worktrees/<name>/`) have their own project root but do **not** inherit the main tree's `.claude/settings.local.json`. Detect this early:
+
+```bash
+WORKTREE_ROOT="$(git rev-parse --show-toplevel)"
+MAIN_ROOT="$(git rev-parse --git-common-dir | sed 's|/\.git$||')"
+if [ "$WORKTREE_ROOT" != "$MAIN_ROOT" ]; then
+  echo "WORKTREE: root=$WORKTREE_ROOT main=$MAIN_ROOT"
+else
+  echo "MAIN_TREE: root=$WORKTREE_ROOT"
+fi
+```
+
+If in a worktree, ensure `.claude/settings.local.json` exists **in the worktree root** (not the main tree). The worktree needs its own copy because Claude Code resolves settings relative to `git rev-parse --show-toplevel`. If the main tree already has a `settings.local.json`, use it as a starting point (read it, then merge in the required permissions below).
+
+1. Read `.claude/settings.local.json` (relative to the current project root — in a worktree, that's the worktree root, not the main tree)
+2. Check whether the `permissions.allow` array already contains all six scoped entries:
+   - `Edit(/.impl-work/**)`
+   - `Write(/.impl-work/**)`
+   - `Edit(/.impl-verification/**)`
+   - `Write(/.impl-verification/**)`
+   - `Edit(/.impl-tracker-*.md)`
+   - `Write(/.impl-tracker-*.md)`
+3. If all six are present → skip (no-op)
+4. If any are missing, inform the user:
+   > Sub-agents need scoped Write/Edit permissions for implementation work directories and tracker files. I'll add these to `.claude/settings.local.json` — this only allows writes under `.impl-work/`, `.impl-verification/`, and to `.impl-tracker-*.md`, nothing else in the project.
+5. Write/merge the missing scoped permissions into `settings.local.json`, preserving all existing entries. If the file doesn't exist, create it with just the permissions block. **In a worktree**, create the `.claude/` directory first if needed (`mkdir -p .claude`).
+6. **Do NOT add unscoped `Write` or `Edit`** — permissions MUST be limited to implementation output paths only.
+7. If the user denies the settings write, log a warning and proceed — the canary pre-flight check will catch permission issues before sub-agents are dispatched.
+
+This runs in the main conversation (where the user can approve the one-time settings write interactively), so all subsequent sub-agents benefit automatically.
+
+---
+
 ## Phase 1: Planning (`/implement <spec-path>`)
 
 Parse the spec, detect worktree context, create the implementation tracker, break requirements into tasks, determine TDD mode, and present the plan to the user for approval.

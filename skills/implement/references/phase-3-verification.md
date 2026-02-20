@@ -73,12 +73,12 @@ A typical spec section with 15 subsections should produce **30-60+ individual re
 
 ## Tools Setup
 
-Before running verification sub-agents, resolve the tools directory:
+The `$IMPL_REPO_DIR`, `$IMPL_TOOLS_DIR`, and `$IMPL_PYTHON` variables should already be set from Common Initialization (see SKILL.md). If not (e.g., after context compaction), re-resolve them:
 
 ```bash
-REPO_DIR="$(dirname "$(readlink -f ~/.claude/skills/implement/SKILL.md)")/../.."
-TOOLS_DIR="$REPO_DIR/tools"
-PYTHON=python3
+IMPL_REPO_DIR="$(cd "$(dirname "$(realpath ~/.claude/skills/implement/SKILL.md)")/../.." && pwd)"
+IMPL_TOOLS_DIR="$IMPL_REPO_DIR/tools"
+IMPL_PYTHON="$IMPL_REPO_DIR/.venv/bin/python"
 ```
 
 ## Step 3: Requirement-Level Verification via Sub-Agents (Parallel)
@@ -100,13 +100,13 @@ Dispatch verification sub-agents using the prompt template at `prompts/verify-re
 **Wait for completion:**
 
 ```bash
-"$PYTHON" "$TOOLS_DIR/wait_for_done.py" --dir <impl-dir>/.impl-verification/<spec-name>/fragments/ --count <number of requirements dispatched>
+"$IMPL_PYTHON" "$IMPL_TOOLS_DIR/wait_for_done.py" --dir <impl-dir>/.impl-verification/<spec-name>/fragments/ --count <number of requirements dispatched>
 ```
 
 **Assemble the report:**
 
 ```bash
-"$PYTHON" "$TOOLS_DIR/verify_report.py" \
+"$IMPL_PYTHON" "$IMPL_TOOLS_DIR/verify_report.py" \
   --fragments-dir <impl-dir>/.impl-verification/<spec-name>/fragments/ \
   --spec-path <spec-path> \
   --impl-path <impl-dir> \
@@ -117,7 +117,7 @@ Dispatch verification sub-agents using the prompt template at `prompts/verify-re
 For re-verification, add `--previous` pointing to the previous report JSON:
 
 ```bash
-"$PYTHON" "$TOOLS_DIR/verify_report.py" \
+"$IMPL_PYTHON" "$IMPL_TOOLS_DIR/verify_report.py" \
   --fragments-dir <impl-dir>/.impl-verification/<spec-name>/fragments/ \
   --spec-path <spec-path> \
   --impl-path <impl-dir> \

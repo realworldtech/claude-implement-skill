@@ -434,10 +434,10 @@ The orchestrator MAY dispatch lightweight agents (haiku-class, boilerplate tasks
 
 ### §5.6.3 Coordination via wait_for_done.py
 
-The `wait_for_done.py` script provides deterministic polling for `.done` markers. It replaces the need to call `TaskOutput` on individual agents.
+The `wait_for_done.py` script provides deterministic polling for `.done` markers. It replaces the need to call `TaskOutput` on individual agents. The `$IMPL_PYTHON` and `$IMPL_TOOLS_DIR` variables are resolved during Common Initialization (§3.0.1) and MUST NOT be redefined locally.
 
 ```bash
-"$PYTHON" "$TOOLS_DIR/wait_for_done.py" \
+"$IMPL_PYTHON" "$IMPL_TOOLS_DIR/wait_for_done.py" \
   --dir <impl-dir>/.impl-verification/<spec-name>/fragments/ \
   --count <number of requirements dispatched>
 ```

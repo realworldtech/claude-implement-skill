@@ -152,7 +152,7 @@ graph LR
 
 **Invocation**:
 ```bash
-python tools/verify_report.py \
+"$IMPL_PYTHON" "$IMPL_TOOLS_DIR/verify_report.py" \
   --fragments-dir <impl-dir>/.impl-verification/<spec-name>/fragments/ \
   --spec-path <spec-path> \
   --impl-path <impl-dir> \
@@ -182,10 +182,10 @@ python tools/verify_report.py \
 **Invocation** (two modes):
 ```bash
 # Wait for N .done files in a directory
-python tools/wait_for_done.py --dir <fragments-dir> --count <N> [--timeout 600] [--interval 2]
+"$IMPL_PYTHON" "$IMPL_TOOLS_DIR/wait_for_done.py" --dir <fragments-dir> --count <N> [--timeout 600] [--interval 2]
 
 # Wait for specific named files
-python tools/wait_for_done.py --files path/a.done path/b.done [--timeout 600]
+"$IMPL_PYTHON" "$IMPL_TOOLS_DIR/wait_for_done.py" --files path/a.done path/b.done [--timeout 600]
 ```
 
 **Exit codes**: `0` if all markers found; `1` if timeout reached.
@@ -200,7 +200,7 @@ timeout = max(600, N * 30)   # 30 seconds per agent, minimum 600s
 
 Pass a custom value with the `--timeout` flag:
 ```bash
-python tools/wait_for_done.py --dir <fragments-dir> --count <N> --timeout <seconds>
+"$IMPL_PYTHON" "$IMPL_TOOLS_DIR/wait_for_done.py" --dir <fragments-dir> --count <N> --timeout <seconds>
 ```
 
 This is guidance, not an enforced constraint — the orchestrator may use any reasonable timeout based on observed agent latency or known task complexity.
@@ -230,22 +230,31 @@ This is guidance, not an enforced constraint — the orchestrator may use any re
 
 ### Tool Discovery at Runtime
 
-The orchestrator resolves the tools directory at verification time:
+The orchestrator resolves the tools directory during Common Initialization (see §3.0), before entering any phase. Three variables are defined once and reused throughout all phases:
+
 ```bash
-REPO_DIR="$(dirname "$(realpath ~/.claude/skills/implement/SKILL.md)")/../.."
-TOOLS_DIR="$REPO_DIR/tools"
-PYTHON=python3
+IMPL_REPO_DIR="$(cd "$(dirname "$(realpath ~/.claude/skills/implement/SKILL.md)")/../.." && pwd)"
+IMPL_TOOLS_DIR="$IMPL_REPO_DIR/tools"
+IMPL_PYTHON="$IMPL_REPO_DIR/.venv/bin/python"
 ```
 
-**Platform note (macOS / Darwin)**: `readlink -f` is a GNU extension and is not available on macOS. The example above uses `realpath`, which is portable across macOS and Linux. If `realpath` is unavailable, `python3 -c "import os; print(os.path.realpath('...'))"` is a reliable fallback.
+**Key design decisions:**
 
-This means the tools directory is resolved relative to the installed SKILL.md location, making it robust to different installation paths.
+- **Prefixed variable names** (`IMPL_` prefix): Prevents namespace collisions when multiple skills are loaded in the same session (e.g., `/spec` uses `SPEC_REPO_DIR`).
+- **Venv Python** (`$IMPL_PYTHON`): Uses the skill repo's virtual environment Python rather than the system `python3`. This ensures a consistent Python version across environments. The tools currently use only the standard library; the venv provides a path for future pip dependencies if needed without changing invocation patterns.
+- **Resolved once, used everywhere**: Previous versions resolved tool paths ad-hoc in individual phases (e.g., verification). Centralising resolution in Common Initialization eliminates inconsistent variable names and ensures all phases use the same paths.
+
+**Platform note**: `realpath` is available on both macOS (BSD) and Linux without additional dependencies. The `cd ... && pwd` wrapper normalises the path, eliminating literal `/../..` segments from the resulting variable. The `dirname` traverses two parent directories because SKILL.md is installed at `<repo>/skills/implement/SKILL.md` — two levels below the repo root.
+
+**Venv existence check**: After resolving `$IMPL_PYTHON`, the skill MUST verify the path exists (`test -x "$IMPL_PYTHON"`). If it does not exist, the skill MUST warn the user: "The implement skill's Python venv is missing. Run `python3 -m venv .venv` in the skill repository root." See FR-0.3.
+
+The tools directory is resolved relative to the installed SKILL.md location, making it robust to different installation paths.
 
 ### Required or Optional
 
 MUST for Phase 3 (Verification). The Python tools are hard dependencies for verification. There is no fallback — manual assembly of verification fragments by the LLM is explicitly prohibited because it would be non-deterministic and context-expensive.
 
-SHOULD have Python 3 available in the execution environment. No version constraint is declared beyond Python 3. The tools use only the standard library.
+SHOULD have Python 3 available in the execution environment. No version constraint is declared beyond Python 3. The tools currently use only the standard library (the venv ensures version consistency and provides a path for future dependencies).
 
 ### What Happens If Python Is Unavailable
 

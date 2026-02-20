@@ -89,8 +89,8 @@ During verification:
 - [ ] Check for previous verify reports — triggers re-verification mode if found
 
 **THEN - Assemble report (deterministic):**
-- [ ] Wait: `"$PYTHON" "$TOOLS_DIR/wait_for_done.py" --dir <impl-dir>/.impl-verification/<name>/fragments/ --count <N>`
-- [ ] Assemble: `"$PYTHON" "$TOOLS_DIR/verify_report.py" --fragments-dir ... --output ...`
+- [ ] Wait: `"$IMPL_PYTHON" "$IMPL_TOOLS_DIR/wait_for_done.py" --dir <impl-dir>/.impl-verification/<name>/fragments/ --count <N>`
+- [ ] Assemble: `"$IMPL_PYTHON" "$IMPL_TOOLS_DIR/verify_report.py" --fragments-dir ... --output ...`
 - [ ] Read the `.md` output to present summary to user
 - [ ] For re-verification: add `--previous` flag pointing to previous report JSON
 

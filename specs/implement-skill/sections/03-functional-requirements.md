@@ -10,6 +10,63 @@ This section specifies the functional requirements for each phase, command, and 
 
 ---
 
+## §3.0 Common Initialization
+
+Common Initialization runs before every phase — `/implement <spec-path>`, `/implement continue`, `/implement verify`, `/implement status`, `/implement list`, `/implement config`. It establishes the runtime environment that all subsequent phases depend on.
+
+### §3.0.1 Tool Path Resolution
+
+- **FR-0.1** The skill MUST resolve three tool path variables during Common Initialization: `IMPL_REPO_DIR`, `IMPL_TOOLS_DIR`, and `IMPL_PYTHON`. These MUST be resolved by following the SKILL.md symlink to the skill repository. See §6.3 Tool Discovery at Runtime for the canonical resolution commands and platform notes.
+- **FR-0.2** `IMPL_PYTHON` MUST point to the skill repository's virtual environment Python (`$IMPL_REPO_DIR/.venv/bin/python`), not the system `python3`. This ensures consistent Python version and dependency availability.
+- **FR-0.3** The skill MUST verify that `$IMPL_PYTHON` exists on disk after resolution. If it does not exist, the skill MUST warn the user that the skill repository's venv is missing and suggest running `python3 -m venv .venv` in the skill repo.
+- **FR-0.4** All subsequent bash commands in all phases MUST use `$IMPL_REPO_DIR`, `$IMPL_TOOLS_DIR`, and `$IMPL_PYTHON`. No phase may redefine these variables with different names (e.g., bare `$PYTHON`, `$TOOLS_DIR`, `$REPO_DIR`).
+
+### §3.0.2 Sub-Agent Write Permissions
+
+Sub-agents dispatched with `run_in_background: true` cannot prompt the user for file write permissions. Without pre-configured scoped permissions, background sub-agents fail silently when attempting to write output files (`.impl-work/`, `.impl-verification/`, `.impl-tracker-*.md`).
+
+- **FR-0.5** The skill MUST check `.claude/settings.local.json` for scoped write permissions before any phase that dispatches file-writing sub-agents.
+- **FR-0.6** The required scoped permissions MUST be:
+  - `Edit(/.impl-work/**)`
+  - `Write(/.impl-work/**)`
+  - `Edit(/.impl-verification/**)`
+  - `Write(/.impl-verification/**)`
+  - `Edit(/.impl-tracker-*.md)`
+  - `Write(/.impl-tracker-*.md)`
+- **FR-0.7** If all required permissions are present, the skill MUST skip permission setup (no-op).
+- **FR-0.8** If any permissions are missing, the skill MUST inform the user what it will add and why, then write/merge the missing entries into `settings.local.json`, preserving all existing entries. The expected JSON structure is:
+  ```json
+  {
+    "permissions": {
+      "allow": [
+        "Edit(/.impl-work/**)",
+        "Write(/.impl-work/**)",
+        "Edit(/.impl-verification/**)",
+        "Write(/.impl-verification/**)",
+        "Edit(/.impl-tracker-*.md)",
+        "Write(/.impl-tracker-*.md)"
+      ]
+    }
+  }
+  ```
+  The merge operation MUST preserve any existing entries in the `permissions.allow` array and append only the missing entries. If `settings.local.json` does not exist, create it with only the `permissions` block above.
+- **FR-0.9** The skill MUST NOT add unscoped `Write` or `Edit` permissions. Permissions MUST be limited to implementation output paths only. **Note on Bash tool writes**: Claude Code's `Write` and `Edit` scoped permissions cover only the Write and Edit tools. Sub-agents that create directories via the Bash tool (e.g., `mkdir -p .impl-work/`) are not restricted by these scoped permissions — Bash tool permissions are governed separately. Directory creation via Bash within the scoped paths is expected and does not require additional permission entries.
+- **FR-0.10** If the user denies the settings write, the skill MUST log a warning and proceed. Sub-agents may fail silently in this case, but the user has made an informed choice.
+
+### §3.0.3 Worktree-Aware Permission Setup
+
+Git worktrees (created via `git worktree add`) have their own project root but do NOT inherit the main tree's `.claude/settings.local.json`. Claude Code resolves settings relative to `git rev-parse --show-toplevel`, which returns the worktree root, not the main tree root.
+
+> **Disambiguation**: This worktree detection determines the *current runtime environment* for permission file placement. It is distinct from §3.1.2's worktree detection, which determines the spec's intended *implementation directory*. §3.0.3 asks "where am I running?" while §3.1.2 asks "where does the spec want me to implement?"
+
+- **FR-0.11** During Common Initialization, the skill MUST detect whether the current working directory is inside a git worktree by comparing `git rev-parse --show-toplevel` with the main tree root derived from `git rev-parse --git-common-dir`. If `git rev-parse` fails (git unavailable or not a git repository), the skill MUST skip worktree detection, treat the current working directory as the project root for permission setup purposes, and log a warning.
+- **FR-0.12** If in a worktree, the skill MUST ensure `.claude/settings.local.json` exists in the **worktree root**, not the main tree root. The `.claude/` directory MUST be created if it does not exist (`mkdir -p .claude`).
+- **FR-0.13** If the main tree already has a `settings.local.json`, the skill SHOULD use it as a starting point (read it, then merge in the required permissions from FR-0.6).
+- **FR-0.14** If not in a worktree, the skill MUST read and update `.claude/settings.local.json` relative to the project root as normal.
+- **FR-0.15** If any Common Initialization step fails for a reason not covered by a specific FR (e.g., broken SKILL.md symlink, malformed `settings.local.json`, unexpected `git rev-parse` output), the skill MUST warn the user with the specific error, suggest a remediation action, and MUST NOT proceed to phase execution.
+
+---
+
 ## §3.1 Phase 1: Planning (`/implement <spec-path>`)
 
 Phase 1 transforms a specification document into an actionable implementation plan: a persistent tracker file, a task breakdown, and a determined workflow mode. No implementation code is written during this phase.
@@ -347,11 +404,11 @@ graph TD
 
 - **FR-3.21** The skill MUST wait for all sub-agents to complete by running:
   ```
-  "$PYTHON" "$TOOLS_DIR/wait_for_done.py" --dir <fragments-dir> --count <N>
+  "$IMPL_PYTHON" "$IMPL_TOOLS_DIR/wait_for_done.py" --dir <fragments-dir> --count <N>
   ```
 - **FR-3.22** The skill MUST assemble the report using the deterministic Python tool:
   ```
-  "$PYTHON" "$TOOLS_DIR/verify_report.py" \
+  "$IMPL_PYTHON" "$IMPL_TOOLS_DIR/verify_report.py" \
     --fragments-dir <fragments-dir> \
     --spec-path <spec-path> \
     --impl-path <impl-dir> \
