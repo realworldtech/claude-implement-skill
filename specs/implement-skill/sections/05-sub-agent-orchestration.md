@@ -18,6 +18,8 @@ The skill operates as a hub-and-spoke system. The orchestrator occupies the hub:
 
 The orchestrator MUST:
 
+- Operate a plan-execute loop for each implementation chunk (see §3.2.1a): enter plan mode, explore scope, write a plan, obtain user approval, then execute
+- Dynamically determine chunk boundaries during the planning phase — breaking large tasks into sub-chunks that each go through their own plan-execute cycle
 - Read the implementation tracker before each delegation decision
 - Re-read the relevant spec sections to prepare sub-agent task briefs
 - Select the appropriate model tier for each task (see §5.3)
@@ -34,6 +36,7 @@ The orchestrator MUST NOT:
 - Write tests directly
 - Perform verification judgments in the main conversation
 - Read full spec documents into the main context when delegating (pass section references or file paths instead)
+- Skip the planning phase for implementation chunks — every chunk goes through `EnterPlanMode`/`ExitPlanMode` (see §3.2.1a)
 
 ### §5.1.2 Sub-Agent Responsibilities
 
@@ -59,6 +62,13 @@ The following diagram shows the complete data flow between the orchestrator, sub
 ```mermaid
 graph TD
     Dev[Developer]:::primary --> Orch[Orchestrator]:::secondary
+
+    subgraph "Plan-Execute Loop"
+        EnterPlan["EnterPlanMode<br/>Read spec, explore codebase"]:::tertiary
+        WritePlan["Write plan<br/>(approach, files, tests)"]:::tertiary
+        ExitPlan["ExitPlanMode<br/>(user approves)"]:::tertiary
+        EnterPlan --> WritePlan --> ExitPlan
+    end
 
     subgraph "Orchestrator Actions"
         ReadTracker[Read tracker + spec]:::secondary
@@ -92,7 +102,8 @@ graph TD
     end
 
     Orch --> ReadTracker --> Tracker
-    ReadTracker --> Dispatch --> SA
+    ReadTracker --> EnterPlan
+    ExitPlan --> Dispatch --> SA
     SA --> ReadSpec --> ReadCode --> DoWork
     DoWork --> WriteJSON --> ImplWork
     DoWork --> WriteJSON --> VerifFrags
@@ -428,7 +439,9 @@ All verification agents MUST be dispatched with `run_in_background: true`. The o
 
 ### §5.6.2 Implementation Dispatch (Limited Parallelism)
 
-During Phase 2, the orchestrator MUST limit concurrent heavy-context sub-agents to a maximum of 2 at a time. Implementation agents consume more resources than verification agents (they modify files, run tools, produce larger outputs), and exceeding this limit can degrade overall throughput and produce file-write conflicts. This is a hard limit, not a guideline.
+During Phase 2, each implementation chunk goes through a plan-execute cycle (§3.2.1a). The planning phase uses `EnterPlanMode`/`ExitPlanMode` for scope assessment and user approval. The execution phase dispatches sub-agents per the approved plan.
+
+Within the execution phase, the orchestrator MUST limit concurrent heavy-context sub-agents to a maximum of 2 at a time. Implementation agents consume more resources than verification agents (they modify files, run tools, produce larger outputs), and exceeding this limit can degrade overall throughput and produce file-write conflicts. This is a hard limit, not a guideline.
 
 The orchestrator MAY dispatch lightweight agents (haiku-class, boilerplate tasks) alongside a heavy-context agent without counting them against the limit.
 

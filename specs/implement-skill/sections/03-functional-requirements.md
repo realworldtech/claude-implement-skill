@@ -65,6 +65,20 @@ Git worktrees (created via `git worktree add`) have their own project root but d
 - **FR-0.14** If not in a worktree, the skill MUST read and update `.claude/settings.local.json` relative to the project root as normal.
 - **FR-0.15** If any Common Initialization step fails for a reason not covered by a specific FR (e.g., broken SKILL.md symlink, malformed `settings.local.json`, unexpected `git rev-parse` output), the skill MUST warn the user with the specific error, suggest a remediation action, and MUST NOT proceed to phase execution.
 
+### §3.0.4 Worktree Dev Environment Replication
+
+Git worktrees share the repository's git history but have their own working directory. Gitignored files — crucially `.venv/`, `node_modules/`, and similar dependency directories — are NOT present in new worktrees. Without the project's dev environment, test runs, linting, and builds will fail during implementation.
+
+- **FR-0.16** If in a worktree, the skill MUST check whether the worktree is missing dev environment directories that exist in the main tree. At minimum, the skill MUST check for `.venv/` (Python) and `node_modules/` (Node.js).
+- **FR-0.17** If the main tree has `.venv/` and the worktree does not, the skill MUST create a Python virtual environment in the worktree and install dependencies. The skill MUST detect the dependency specification format by checking for (in priority order): `pyproject.toml` with a `[build-system]` section, `requirements.txt`, `requirements-dev.txt`, `setup.py`, `setup.cfg`. These files are tracked by git and will be present in the worktree.
+- **FR-0.18** For Python dependency installation, the skill MUST use the appropriate install command:
+  - `pyproject.toml`: `pip install -e ".[dev]"` (falling back to `pip install -e .` if no `dev` extra is defined)
+  - `requirements.txt`: `pip install -r requirements.txt` (and additionally `-r requirements-dev.txt` if that file exists)
+  - `setup.py`/`setup.cfg`: `pip install -e .`
+- **FR-0.19** If the main tree has `node_modules/` and the worktree has `package.json` but no `node_modules/`, the skill MUST run the appropriate package manager install command. The skill SHOULD detect the package manager from lockfile presence: `package-lock.json` → `npm install`, `yarn.lock` → `yarn install`, `pnpm-lock.yaml` → `pnpm install`.
+- **FR-0.20** If venv creation or dependency installation fails, the skill MUST warn the user with the specific error and suggest manual resolution. The skill MUST NOT block Phase 1 (planning) on environment setup failure — the user may want to proceed with planning even if the environment is not ready. The skill SHOULD warn again at Phase 2 entry if the environment is still missing.
+- **FR-0.21** If not in a worktree, the skill MUST NOT attempt to create or modify the project's dev environment. Dev environment replication is exclusively a worktree concern.
+
 ---
 
 ## §3.1 Phase 1: Planning (`/implement <spec-path>`)
@@ -165,22 +179,67 @@ Phase 1 transforms a specification document into an actionable implementation pl
 
 ## §3.2 Phase 2: Implementation
 
-Phase 2 executes the implementation plan created in Phase 1, delegating work to sub-agents while the orchestrator maintains tracker state and enforces quality gates. Two workflows exist depending on TDD mode.
+Phase 2 executes the implementation plan created in Phase 1, delegating work to sub-agents while the orchestrator maintains tracker state and enforces quality gates. Two workflows exist depending on TDD mode (Standard or TDD), both operating inside a plan-execute orchestration loop.
 
 > **Artifact directory rationale**: Implementation artifacts (`summary.json`, `compliance.json`, `fix-summary.json`) are stored in `.impl-work/<spec-name>/` because they are per-task working files produced during implementation. Verification artifacts (JSON fragments, assembled reports) are stored in `.impl-verification/<spec-name>/` because they are per-run diagnostic outputs produced during verification. This separation keeps working state distinct from audit outputs.
 
 ### §3.2.1 Pre-Implementation Checks
 
-These checks apply to both Standard and TDD workflows.
+These checks apply to both Standard and TDD workflows and run once at Phase 2 entry.
 
 - **FR-2.1** The skill MUST verify that a tracker file (`.impl-tracker-*.md`) exists in the implementation directory before writing any implementation code.
 - **FR-2.2** The skill MUST verify that the tracker has a populated Requirements Matrix.
 - **FR-2.3** The skill MUST verify that tasks have been created via `TaskCreate`.
 - **FR-2.4** If any of FR-2.1 through FR-2.3 fail, the skill MUST stop and require completion of Phase 1 before proceeding. This is a hard gate.
 
+### §3.2.1a Plan-Execute Orchestration Loop
+
+Phase 2 operates as a **plan-execute loop**: each master task from Phase 1 goes through a planning phase (using `EnterPlanMode`/`ExitPlanMode`) that breaks it into visible sub-tasks, followed by execution of each sub-task individually. This creates natural context boundaries, gives the user visibility into what's happening, and provides an approval gate before each chunk of work.
+
+> **Why this matters**: Without the plan-execute loop, a complex master task (e.g., "Create PrintClient and PrintRequest models") becomes a 20-minute black box that fills the context window. With the loop, that master task is first broken into visible steps (create model file, add migrations, register admin, add serializers, write tests), each executed individually with context relief between them.
+
+#### Two levels of tasks
+
+- **Master tasks** are created during Phase 1 (§3.1.6). These are the high-level requirements from the spec — typically 5-15 per implementation. They represent the user-visible task list and provide the overall progress view.
+- **Sub-tasks** are created during the planning phase of each master task. These are the concrete implementation steps — typically 2-7 per master task. Each sub-task is small enough to execute without filling the context window.
+
+```mermaid
+graph TD
+    A["Pick next master task<br/>from Phase 1 task list"]:::primary --> B[EnterPlanMode]:::tertiary
+    B --> C["Read spec section(s)<br/>Explore codebase<br/>Assess scope"]:::secondary
+    C --> D["Write plan + create<br/>sub-tasks via TaskCreate"]:::secondary
+    D --> E["ExitPlanMode<br/>(user approves)"]:::tertiary
+    E --> F{User approves?}:::tertiary
+    F -->|No — adjust| B
+    F -->|No — skip/other| A
+    F -->|Yes| G["Pick next sub-task"]:::accent
+    G --> H["EnterPlanMode<br/>for sub-task"]:::tertiary
+    H --> I["Refine approach<br/>based on current state"]:::secondary
+    I --> J["ExitPlanMode"]:::tertiary
+    J --> K["Execute: dispatch<br/>sub-agent per<br/>TDD or Standard"]:::accent
+    K --> L["Review results<br/>Update tracker"]:::accent
+    L --> M{More sub-tasks?}:::tertiary
+    M -->|Yes| G
+    M -->|No| N["Mark master task<br/>complete"]:::accent
+    N --> O{More master tasks?}:::tertiary
+    O -->|Yes| A
+    O -->|No| P[Phase 2 complete]:::accent
+```
+
+#### Orchestration Loop Requirements
+
+- **FR-2.60** The orchestrator MUST use `EnterPlanMode` before beginning work on each master task. The planning phase MUST include: reading the relevant spec section(s), exploring the codebase to identify files that need modification, and assessing the scope of the change.
+- **FR-2.61** During the planning phase, the orchestrator MUST break the master task into concrete sub-tasks and create them as visible tasks via `TaskCreate`. Each sub-task MUST have a clear, specific subject (e.g., "Add PrintClient model to models.py" not "implement models") and MUST reference the parent master task. Sub-tasks SHOULD be ordered by dependency and each should be small enough to execute in a single sub-agent dispatch without excessive context accumulation.
+- **FR-2.62** The orchestrator MUST write a plan covering: the implementation approach, the sub-task breakdown, the files to be created or modified per sub-task, and the test strategy. The plan provides the user with full visibility into what will happen before any code is written.
+- **FR-2.63** The orchestrator MUST call `ExitPlanMode` to present the plan for user approval. The `allowedPrompts` parameter SHOULD scope Bash permissions to only the operations needed for the current work (e.g., test execution commands, build commands).
+- **FR-2.64** If the user rejects a plan, the orchestrator MUST re-enter plan mode with an adjusted approach, unless the user explicitly directs otherwise (e.g., skip the task, change the order, or stop).
+- **FR-2.65** Each sub-task MUST go through its own plan-execute cycle. The orchestrator MUST call `EnterPlanMode` before each sub-task to refine the approach based on the current state of the codebase (which may have changed from earlier sub-tasks). This per-sub-task planning phase is typically lightweight — confirming the approach still applies and identifying any adjustments needed — but it provides a context boundary between sub-tasks.
+- **FR-2.66** After the user approves a sub-task plan via `ExitPlanMode`, the orchestrator enters the execution phase. During execution, the orchestrator dispatches sub-agents per the Standard workflow (§3.2.2) or TDD workflow (§3.2.3), depending on the determined TDD mode. The plan-execute loop is the outer orchestration mechanism; Standard and TDD are inner execution strategies.
+- **FR-2.67** When all sub-tasks for a master task are complete, the orchestrator MUST mark the master task as complete and proceed to the next master task. If during sub-task execution the orchestrator discovers the original plan was insufficient (e.g., new sub-tasks are needed), it MUST create additional sub-tasks via `TaskCreate` before proceeding.
+
 ### §3.2.2 Standard Workflow (TDD Off)
 
-The Standard workflow implements code first, then writes tests afterward.
+The Standard workflow implements code first, then writes tests afterward. This workflow runs inside the execution phase of the plan-execute loop (§3.2.1a) — the orchestrator has already planned and received user approval before reaching these steps.
 
 ```mermaid
 graph TD
@@ -202,7 +261,7 @@ graph TD
 
 #### Step 1: Context Preparation
 
-- **FR-2.5** Before delegating any task, the orchestrator MUST read the tracker file to obtain section references.
+- **FR-2.5** Before delegating any task, the orchestrator MUST read the tracker file to obtain section references. Note: much of this context may already be available from the preceding planning phase (§3.2.1a), but the orchestrator MUST verify it is current.
 - **FR-2.6** The orchestrator MUST re-read the relevant spec sections from the original document (single-file) or confirm which section files the sub-agent will read (multi-file). This is mandatory, not optional.
 - **FR-2.7** The orchestrator MUST identify relevant existing code files the sub-agent will need.
 
@@ -262,7 +321,7 @@ graph TD
 
 ### §3.2.3 TDD Workflow (TDD On)
 
-The TDD workflow writes tests first from the specification, then implements code to make them pass. This exploits context isolation between agents: the test-writing agent interprets the spec independently of any implementation.
+The TDD workflow writes tests first from the specification, then implements code to make them pass. This exploits context isolation between agents: the test-writing agent interprets the spec independently of any implementation. Like the Standard workflow, TDD runs inside the execution phase of the plan-execute loop (§3.2.1a).
 
 ```mermaid
 graph TD

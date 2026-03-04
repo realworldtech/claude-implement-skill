@@ -16,6 +16,7 @@ from verification_schema import (
     SchemaError,
     Status,
     TestCoverage,
+    _build_file_ref,
     assemble_report,
     assign_v_items,
     classify_priority_gaps,
@@ -134,6 +135,91 @@ class TestFileRef:
         assert ref.path == "views/capture.py"
         assert ref.lines == ""
         assert ref.description == ""
+
+
+class TestBuildFileRef:
+    """Test _build_file_ref coercion of strings to FileRef objects."""
+
+    def test_dict_input(self):
+        ref = _build_file_ref(
+            {"path": "foo.py", "lines": "10-20", "description": "desc"}
+        )
+        assert ref.path == "foo.py"
+        assert ref.lines == "10-20"
+        assert ref.description == "desc"
+
+    def test_dict_with_int_lines(self):
+        ref = _build_file_ref({"path": "foo.py", "lines": 30})
+        assert ref.lines == "30"
+
+    def test_string_with_path_and_lines(self):
+        ref = _build_file_ref("src/consumers.py:30-45")
+        assert ref.path == "src/consumers.py"
+        assert ref.lines == "30-45"
+        assert ref.description == ""
+
+    def test_string_path_only(self):
+        ref = _build_file_ref("src/consumers.py")
+        assert ref.path == "src/consumers.py"
+        assert ref.lines == ""
+
+    def test_string_with_spaces(self):
+        ref = _build_file_ref("  src/foo.py : 10-20 ")
+        assert ref.path == "src/foo.py"
+        assert ref.lines == "10-20"
+
+
+class TestValidateFragmentFileCoercionWarnings:
+    """Test that string file refs produce warnings, not errors."""
+
+    def test_string_impl_files_warn(self):
+        frag = _valid_fragment(
+            {
+                "implementation": {
+                    "files": ["src/foo.py:30-45", "src/bar.py"],
+                    "notes": "",
+                }
+            }
+        )
+        errors, warnings = validate_fragment(frag, "02-01-01.json")
+        assert not errors
+        assert len(warnings) >= 2
+        assert "coerced" in warnings[0]
+
+    def test_string_tests_warn(self):
+        frag = _valid_fragment({"tests": ["test_foo.py:10-25"]})
+        errors, warnings = validate_fragment(frag, "02-01-01.json")
+        assert not errors
+        assert any("tests[0]" in w for w in warnings)
+
+
+class TestLoadFragmentStringCoercion:
+    """Test that load_fragment handles string file refs end-to-end."""
+
+    def test_loads_string_impl_files(self, tmp_path):
+        frag = _valid_fragment(
+            {
+                "implementation": {
+                    "files": ["src/consumers.py:30-45"],
+                    "notes": "some notes",
+                }
+            }
+        )
+        path = tmp_path / "02-01-01.json"
+        path.write_text(json.dumps(frag))
+        finding = load_fragment(path)
+        assert len(finding.implementation.files) == 1
+        assert finding.implementation.files[0].path == "src/consumers.py"
+        assert finding.implementation.files[0].lines == "30-45"
+
+    def test_loads_string_tests(self, tmp_path):
+        frag = _valid_fragment({"tests": ["test_foo.py:10-25"]})
+        path = tmp_path / "02-01-01.json"
+        path.write_text(json.dumps(frag))
+        finding = load_fragment(path)
+        assert len(finding.tests) == 1
+        assert finding.tests[0].path == "test_foo.py"
+        assert finding.tests[0].lines == "10-25"
 
 
 # ---------------------------------------------------------------------------

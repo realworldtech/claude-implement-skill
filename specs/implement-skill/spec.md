@@ -1,6 +1,6 @@
 # Implement Skill — Specification
 
-**Version**: 1.1
+**Version**: 1.3
 **Status**: Drafting
 **Date**: 2026-02-20
 **Author**:

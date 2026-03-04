@@ -23,14 +23,36 @@ This single habit prevents most implementation drift.
 
 ---
 
-## Pre-Task Checklist
+## Pre-Task Checklist (Plan-Execute Loop)
 
-Before starting any task:
+Phase 2 uses two levels of tasks: **master tasks** (from Phase 1) and **sub-tasks** (created during planning).
 
-- [ ] Read the task description for section references (e.g., §4.2)
+### Critical Rules (Non-Negotiable)
+
+- **ONE GROUP AT A TIME.** Only plan the next pending master task. Never batch-plan multiple groups.
+- **WORKTREE DISCIPLINE.** If the tracker has a worktree, ALL work happens there. Check before every file operation.
+- **RETURN TO PLANNING.** After completing a master task, call `EnterPlanMode` for the next one. Do not continue directly.
+
+### Master Task Planning (next pending group ONLY):
+
+- [ ] **`EnterPlanMode`**
+- [ ] Confirm you are in the correct directory (worktree if applicable)
+- [ ] Read the master task description for section references (e.g., §4.2)
 - [ ] Open and read those sections from the spec
+- [ ] Explore the codebase — identify files to modify, existing patterns
 - [ ] Note any specific formats, constraints, or edge cases mentioned
 - [ ] Check the tracker for related completed work
+- [ ] **Break into sub-tasks** — create via `TaskCreate` with specific subjects (e.g., "Add PrintClient model to models.py")
+- [ ] Write the plan: approach, sub-task breakdown, files per sub-task, test strategy
+- [ ] **Include skill context preamble at top of plan** (identifies /implement skill, tracker path, workflow ref, completion protocol)
+- [ ] **`ExitPlanMode`** with scoped `allowedPrompts` — user approves
+- [ ] **Create checkpoint task as final sub-task** ("Complete Group N: update tracker and return to planning")
+- [ ] If rejected: re-enter plan mode with adjusted approach
+
+### For Each Sub-Task:
+
+- [ ] **`EnterPlanMode`** — lightweight: confirm approach, note any changes from earlier sub-tasks
+- [ ] **`ExitPlanMode`** — user approves
 - [ ] Check the tracker's `**TDD Mode**:` field to determine the workflow
 
 ### If TDD Mode is ON:
@@ -41,6 +63,13 @@ Before starting any task:
 - [ ] Run tests — confirm all pass (new + existing)
 - [ ] If a test seems wrong: flag for user review, don't silently change it
 - [ ] After tests pass, continue with the Post-Task Checklist below (linting, tracker update, etc.)
+
+### After sub-task completes:
+
+- [ ] Mark sub-task complete via `TaskUpdate`
+- [ ] If more sub-tasks remain: loop back to "For Each Sub-Task"
+- [ ] If all sub-tasks done: mark master task complete
+- [ ] **THEN: `EnterPlanMode` for the next pending master task** — do NOT skip planning
 
 ---
 
@@ -239,8 +268,7 @@ When starting or resuming work:
 7. **Read the Recovery Instructions** section in the tracker if you're unsure of the workflow
 8. Run `TaskList` to see pending tasks
 9. Pick the next task
-10. Read the spec sections for that task
-11. Delegate to sub-agent for implementation
+10. Enter the plan-execute loop (see Pre-Task Checklist above)
 
 ### Recognizing Compaction
 

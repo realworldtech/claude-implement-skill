@@ -160,6 +160,27 @@ If in a worktree, ensure `.claude/settings.local.json` exists **in the worktree 
 
 This runs in the main conversation (where the user can approve the one-time settings write interactively), so all subsequent sub-agents benefit automatically.
 
+### Replicate Project Dev Environment in Worktrees
+
+Git worktrees share the repository's git history but have their own working directory. Gitignored files — crucially `.venv/`, `node_modules/`, and similar dependency directories — are **not** present in the worktree. This means test runs, linting, and builds will fail unless the dev environment is replicated.
+
+If in a worktree (`$WORKTREE_ROOT != $MAIN_ROOT`), check whether the worktree needs a dev environment:
+
+1. **Python venv**: If the main tree has `.venv/` and the worktree does not:
+   - Check for dependency files in the worktree (they're tracked by git, so they'll be present): `requirements.txt`, `requirements-dev.txt`, `pyproject.toml`, `setup.py`, `setup.cfg`
+   - Create a venv: `python3 -m venv .venv`
+   - Install dependencies based on what's found:
+     - `pyproject.toml` with `[build-system]`: `pip install -e ".[dev]"` (or `pip install -e .` if no `dev` extra)
+     - `requirements.txt`: `pip install -r requirements.txt`
+     - `requirements-dev.txt`: also `pip install -r requirements-dev.txt`
+     - `setup.py`/`setup.cfg`: `pip install -e .`
+   - Inform the user what was installed
+2. **Node.js**: If the main tree has `node_modules/` and the worktree has `package.json` but no `node_modules/`:
+   - Run `npm install` (or `yarn install` / `pnpm install` if lockfile indicates the package manager)
+3. **Other ecosystems**: If the project uses other dependency managers (Go modules, Rust cargo, etc.), these typically resolve from source and don't need special worktree handling.
+
+If the venv or dependency install fails, warn the user with the specific error and suggest manual resolution. Do not block Phase 1 — the user may want to proceed with planning even if the environment isn't ready yet.
+
 ---
 
 ## Phase 1: Planning (`/implement <spec-path>`)
@@ -175,22 +196,54 @@ Key steps:
 4. **Create the tracker** — in the implementation directory (see `references/tracker-format.md` for the template)
 5. **Create tasks** — with section references in subject and description
 6. **Determine TDD mode** — from preferences
-7. **Present the plan** — get user approval before proceeding
+7. **Present the plan** — the plan **MUST** include an `## Execution Protocol` section that describes the plan-execute loop for each task group (enter plan mode → break into sub-tasks → get user approval → execute). This section survives context compaction and is the mechanism that triggers proper Phase 2 behavior. The Execution Protocol **MUST** include: (a) a rule that only ONE group is planned at a time, (b) worktree path/branch if applicable, (c) explicit instruction to return to `EnterPlanMode` after each group completes. See `references/phase-1-planning.md` Step 5 for the required template.
 
 ---
 
 ## Phase 2: Implementation
 
-Implement requirements via sub-agents, run tests, update the tracker. Two workflows depending on TDD mode:
+Phase 2 operates as a **plan-execute loop**. For each chunk of work, the orchestrator enters plan mode to assess scope, writes a plan, gets user approval, then executes via sub-agents.
+
+### Two levels of tasks
+
+- **Master tasks** are created during Phase 1 — the high-level requirements from the spec (typically 5-15). These are the user-visible progress indicators.
+- **Sub-tasks** are created during the plan-execute loop — the concrete implementation steps for each master task (typically 2-7 each). Each sub-task is small enough to execute without filling the context.
+
+### Critical Loop Rules
+
+These rules are non-negotiable and must be followed at all times:
+
+1. **ONE GROUP AT A TIME.** Only plan the next pending master task. Never create plans covering multiple groups (e.g., "plan Groups 2-5" is forbidden). Each group gets its own planning session.
+2. **WORKTREE DISCIPLINE.** If the tracker specifies a worktree, ALL file edits, test runs, and sub-agent dispatches target that worktree directory — never the main tree.
+3. **RETURN TO PLANNING.** After completing a master task, the next action is always `EnterPlanMode` for the next pending task. Do NOT continue directly to execution.
+
+### The Plan-Execute Loop
+
+For the **next pending master task only**:
+
+1. **`EnterPlanMode`** — Read the relevant spec section(s), explore the codebase, assess scope. Confirm you are working in the correct directory (worktree if applicable).
+2. **Break into sub-tasks** — Create visible sub-tasks via `TaskCreate` with specific subjects (e.g., "Add PrintClient model to models.py" not "implement models"). Write the plan covering approach, files per sub-task, and test strategy. Every plan written during `ExitPlanMode` **MUST** begin with a skill context preamble that identifies the `/implement` skill, links to the tracker and workflow reference file, and states the completion protocol. This preamble survives context compaction and is how the model recovers orchestration discipline. See the Phase 2 reference files for the exact template.
+3. **`ExitPlanMode`** — User reviews the plan and sub-task breakdown, approves. Scope `allowedPrompts` to the Bash operations needed (test commands, builds).
+4. **For each sub-task:**
+   - **`EnterPlanMode`** — Lightweight: confirm the approach still applies given current codebase state, identify any adjustments
+   - **`ExitPlanMode`** — User approves
+   - **Execute** — Dispatch sub-agent per TDD or Standard workflow, run tests, update tracker. If in a worktree, sub-agent prompts must include the worktree path.
+5. **Mark master task complete** when all sub-tasks are done. If new sub-tasks are discovered during execution, create them via `TaskCreate` before proceeding.
+6. **Return to step 1** — `EnterPlanMode` for the next pending master task. Do NOT batch-plan remaining groups.
+
+If the user rejects a plan, re-enter plan mode with an adjusted approach (unless the user says to skip or do something else).
+
+### Execution Workflows
+
+Two workflows run inside each sub-task's execute phase, depending on TDD mode:
 
 - **TDD Mode (default)**: Tests written first from spec, then implementation to make them pass. **Read `references/phase-2-tdd.md`.**
 - **Standard Mode**: Implementation first, then tests. **Read `references/phase-2-implementation.md`.**
 
 Both workflows follow the same pattern:
-1. Prepare context from tracker + spec
-2. Delegate to sub-agent (see `references/sub-agent-strategy.md` for model selection)
-3. Review changes, run tests, check DIGEST for escalation
-4. Update tracker only after tests pass
+1. Delegate to sub-agent (see `references/sub-agent-strategy.md` for model selection)
+2. Review changes, run tests, check DIGEST for escalation
+3. Update tracker only after tests pass
 
 **Pre-implementation check**: A tracker must exist with a populated Requirements Matrix and tasks created via TaskCreate. If missing, complete Phase 1 first.
 

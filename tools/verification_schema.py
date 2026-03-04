@@ -226,6 +226,23 @@ def validate_fragment(data: dict, filename: str) -> tuple[list[str], list[str]]:
     if isinstance(impl, dict) and "files" not in impl:
         errors.append("implementation missing required field: files")
 
+    # Warn if implementation.files contains strings instead of objects
+    if isinstance(impl, dict):
+        for i, item in enumerate(impl.get("files", [])):
+            if isinstance(item, str):
+                warnings.append(
+                    f"implementation.files[{i}] is a string ('{item}'), "
+                    f"expected object with path/lines/description — will be coerced"
+                )
+
+    # Warn if tests contains strings instead of objects
+    for i, item in enumerate(data.get("tests", [])):
+        if isinstance(item, str):
+            warnings.append(
+                f"tests[{i}] is a string ('{item}'), "
+                f"expected object with path/lines/description — will be coerced"
+            )
+
     # Enum validation
     for field_name, enum_cls in _ENUM_FIELDS.items():
         value = data.get(field_name)
@@ -294,13 +311,27 @@ def validate_fragment(data: dict, filename: str) -> tuple[list[str], list[str]]:
 # ---------------------------------------------------------------------------
 
 
-def _build_file_ref(data: dict) -> FileRef:
-    """Build a FileRef from a dict."""
-    return FileRef(
-        path=data.get("path", ""),
-        lines=data.get("lines", ""),
-        description=data.get("description", ""),
-    )
+def _build_file_ref(data) -> FileRef:
+    """Build a FileRef from a dict or coerce a string.
+
+    Sub-agents sometimes write file references as plain strings
+    (e.g. "src/foo.py:30-45") instead of the expected object format.
+    This function handles both gracefully.
+    """
+    if isinstance(data, str):
+        # Parse "path:lines" or just "path"
+        if ":" in data:
+            path, _, lines = data.partition(":")
+            return FileRef(path=path.strip(), lines=lines.strip(), description="")
+        return FileRef(path=data.strip(), lines="", description="")
+    if isinstance(data, dict):
+        return FileRef(
+            path=data.get("path", ""),
+            lines=str(data.get("lines", "")),
+            description=data.get("description", ""),
+        )
+    # Fallback: stringify whatever it is
+    return FileRef(path=str(data), lines="", description="")
 
 
 def load_fragment(path: Path) -> Finding:

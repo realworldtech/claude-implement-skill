@@ -125,7 +125,59 @@ Show the user:
    > - **TDD mode**: Tests are written first from the spec (before any implementation code), then implementation is done to make them pass.
    > - **Standard mode**: Implementation is done first, then tests are written afterward to verify the implementation.
 
-5. Any questions about ambiguous requirements or implementation approach
+5. **An Execution Protocol section** (mandatory — see below)
+6. Any questions about ambiguous requirements or implementation approach
+
+### Execution Protocol Section (Required)
+
+The generated plan **MUST** include an `## Execution Protocol` section. This section survives context compaction and tells the model how to execute the plan — without it, the plan reads as a flat list of work and the model will skip the plan-execute loop.
+
+The section should be concise (not a copy of the Phase 2 reference) but specific enough to trigger the correct behavior. Use this template, adjusted for TDD/standard mode:
+
+```markdown
+## Execution Protocol
+
+**CRITICAL RULES — these override any temptation to shortcut:**
+
+1. **ONE GROUP AT A TIME.** Do NOT plan multiple groups in a single planning
+   session. Plan one group → get approval → execute it → then plan the next.
+2. **WORKTREE AWARENESS.** [If worktree: "All implementation work happens in
+   the worktree at `<path>` (branch: `<branch>`). Every file edit, test run,
+   and sub-agent dispatch MUST target this directory, not the main tree."
+   If no worktree: remove this bullet.]
+3. **RETURN TO PLANNING.** After completing a group, do NOT continue to the
+   next group. Instead: update the tracker, mark the master task complete,
+   then call `EnterPlanMode` to plan the next group from scratch.
+4. **SKILL CONTEXT PREAMBLE.** Every group plan MUST begin with a skill context
+   preamble that identifies the /implement skill, links to the tracker and
+   workflow reference file, and states the completion protocol. This preamble
+   survives context compaction. See the Phase 2 reference files for the template.
+
+### Per-Group Loop
+
+For the **next pending group only** (not all remaining groups):
+
+1. **Enter plan mode** (`EnterPlanMode`) — read the relevant spec sections, explore
+   the codebase for the group's files, assess scope and dependencies.
+2. **Break into sub-tasks** — create concrete sub-tasks via `TaskCreate` (e.g.,
+   "Add rate limiting to _handle_authenticate" not "implement Group 1").
+   Create a final **checkpoint task**: "Complete Group N: update tracker and
+   return to planning" — a structural reminder to follow the completion protocol.
+3. **Exit plan mode** (`ExitPlanMode`) — present the sub-task breakdown to the user
+   for approval before any code is written.
+4. **Execute sub-tasks** — for each sub-task, use the [TDD test-first / standard]
+   cycle. Load `references/phase-2-[tdd/implementation].md` for full details.
+   [If worktree: "Run all tests and builds in `<worktree-path>`." ]
+5. **Mark group complete** — only after all sub-tasks pass tests and tracker is
+   updated.
+6. **Return to step 1** — `EnterPlanMode` for the next group. Do NOT batch-plan
+   remaining groups.
+
+**No group begins execution without an approved sub-task plan.**
+**No group is planned until the previous group is fully complete.**
+```
+
+This is not optional boilerplate — it is the mechanism that ensures each group gets proper planning, user approval, and structured execution. Without it, the model will treat the task list as a sequential checklist and execute without planning or approval gates.
 
 After the user approves the plan (and chooses a workflow if `ask` mode):
 - **Record the choice in the tracker** by setting the `**TDD Mode**:` field to `on` or `off`.
